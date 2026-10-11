@@ -1,0 +1,57 @@
+.pdf-reader {
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-width: 0;
+  min-height: 0;
+  padding: 24px;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+}
+.pdf-reader::-webkit-scrollbar { width: 14px; height: 14px; }
+.pdf-reader::-webkit-scrollbar-track,
+.pdf-reader::-webkit-scrollbar-corner { background: color-mix(in srgb, var(--editor-ink, #213a34) 14%, var(--surface-glass, #fff8)); }
+.pdf-reader::-webkit-scrollbar-thumb {
+  min-width: 40px;
+  min-height: 40px;
+  border: 3px solid transparent;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--editor-ink, #213a34) 65%, transparent);
+  background-clip: padding-box;
+}
+.pdf-reader::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--editor-ink, #213a34) 85%, transparent); }
+.pdf-reader::-webkit-scrollbar-thumb:active { background-color: var(--editor-ink, #213a34); }
+.pdf-reader::-webkit-scrollbar-button { display: none; }
+.pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 24px; width: max-content; min-width: 100%; }
+.pdf-page {
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: relative;
+  flex-shrink: 0;
+  margin: 0 auto;
+  background: #fff;
+  color-scheme: only light;
+  box-shadow: 0 10px 42px #0002, 0 1px 5px #0003;
+  isolation: isolate;
+  direction: ltr;
+}
+.pdf-page > canvas { display: block; width: 100%; height: 100%; }
+.pdf-page[data-rendered="false"]::before { content: "第 " attr(data-page-number) " 页"; position: absolute; inset: 40px 0 auto; text-align: center; color: #647778; font-size: 14px; z-index: -1; }
+.pdf-page .textLayer { z-index: 2; }
+.pdf-page .textLayer.selectionRendering ::selection { background: transparent; color: transparent; }
+.pdf-page > .selection { position: absolute; inset: 0; z-index: 3; pointer-events: none; background: #649bd366; }
+.pdf-page > .selection > svg { position: absolute; inset: 0; }
+.pdf-page .highlight-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: multiply; }
+.highlight-layer .highlight-group { position: absolute; inset: 0; opacity: .48; }
+.highlight-layer [data-highlight-id] { position: absolute; border-radius: 2px; }
+.annotation-marker-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.annotation-marker { position: absolute; display: grid; place-items: center; width: 24px; height: 24px; padding: 4px; border-radius: 8px; border: 1px solid transparent; color: #284039; background: transparent; opacity: .22; pointer-events: auto; cursor: pointer; transition: opacity .18s, background-color .18s, border-color .18s; }
+.annotation-marker svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.annotation-marker:focus-visible { outline: 2px solid var(--editor-ink); outline-offset: 2px; }
+.annotation-marker:hover, .annotation-marker:focus-visible { opacity: 1; color: var(--editor-ink); background: var(--editor-panel), #ecede6f5; border-color: color-mix(in srgb, var(--editor-ink) 24%, transparent); box-shadow: 0 2px 8px #0002; }
+[data-presentation="dark"] .annotation-marker:hover, [data-presentation="dark"] .annotation-marker:focus-visible { background: var(--editor-panel), #17201ef5; }
+.pdf-message { margin: 80px auto; text-align: center; max-width: 460px; line-height: 1.8; padding: 24px; color: var(--text, #fff); }
+.pdf-error { background: #541a243d; border: 1px solid #ffb5b53d; border-radius: 18px; }
+.pdf-scan-note { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); margin: 0; width: max-content; max-width: calc(100% - 24px); padding: 8px 12px; font-size: 12px; line-height: 1.5; color: #526364; background: #edf4f7e8; border-radius: 10px; pointer-events: none; z-index: 3; }
+@media (max-width: 700px) { .pdf-reader { padding: 24px 16px; } }

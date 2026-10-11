@@ -1,0 +1,27 @@
+Raindrop FX 1.0.8
+https://github.com/SardineFish/raindrop-fx
+Pinned commit: bae4081bc15815bb094ea040a976dca083bbc3a5
+Source: https://raw.githubusercontent.com/SardineFish/raindrop-fx/bae4081bc15815bb094ea040a976dca083bbc3a5/bundle/index.js
+Copyright (c) 2021 SardineFish. MIT license in LICENSE.
+
+The browser bundle is vendored for offline use. Local changes: a provenance
+comment, removal of the missing source-map reference, and an ES module default
+export. Simulation and shaders are the upstream implementation. The embedded
+raindrop normal-map texture is part of that implementation. No upstream demo
+photograph, wallpaper, sound, or other artwork is included.
+
+Bundled dependencies, as recorded in upstream package-lock.json:
+- zogra-renderer 1.3.5, SardineFish, MIT (LICENSE-zogra-renderer)
+  https://github.com/SardineFish/zogra-renderer
+- gl-matrix 3.4.3, Brandon Jones and Colin MacKenzie IV, MIT (LICENSE-gl-matrix)
+  https://github.com/toji/gl-matrix
+- reflect-metadata 0.1.13, Microsoft, Apache-2.0
+  (LICENSE-reflect-metadata and NOTICE-reflect-metadata.txt)
+  https://github.com/rbuckton/reflect-metadata
+
+The Carnet adapter advances simulation from the scene's existing frame clock;
+the upstream animation loop is never started. It disables mist and global
+background blur, uses the existing photo canvas, and removes evaporated
+particles before their mass can become negative in the upstream simulation.
+It also supplies the missing source-copy operation for zero-step background
+blur in upstream 1.0.8, preserving the original photograph's sharpness.

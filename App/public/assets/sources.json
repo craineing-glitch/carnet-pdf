@@ -1,0 +1,56 @@
+{
+  "paris": {
+    "file": "paris.jpg",
+    "title": "Eiffel Tower Seen through Pane in Rain",
+    "photographer": "Philippa Samson",
+    "source": "https://www.pexels.com/photo/eiffel-tower-seen-through-pane-in-rain-14062426/",
+    "image": "https://images.pexels.com/photos/14062426/pexels-photo-14062426.jpeg?cs=srgb&dl=pexels-philippa-samson-577770-14062426.jpg&fm=jpg",
+    "license": "Pexels License",
+    "licenseUrl": "https://www.pexels.com/license/",
+    "width": 2749,
+    "height": 3915,
+    "description": "Paris through a rain-specked window, with a softly blurred Eiffel Tower. The photograph does not specifically depict a cafe."
+  },
+  "cafe": {
+    "file": "cafe.jpg",
+    "title": "Cozy Cafe Interior with Warm Lighting in India",
+    "photographer": "Murali dharan",
+    "source": "https://www.pexels.com/photo/cozy-cafe-interior-with-warm-lighting-in-india-38757822/",
+    "image": "https://images.pexels.com/photos/38757822/pexels-photo-38757822.jpeg?cs=srgb&fm=jpg&w=2400",
+    "license": "Pexels License",
+    "licenseUrl": "https://www.pexels.com/license/",
+    "width": 2400,
+    "height": 1600,
+    "description": "Warm amber cafe counter and hanging lamps, with soft foreground blur."
+  },
+  "forest": {
+    "file": "forest.jpg",
+    "title": "A wood burning stove inside of a wooden cabin",
+    "photographer": "Clay Banks",
+    "source": "https://unsplash.com/photos/a-wood-burning-stove-inside-of-a-wooden-cabin-79yk4XalXCM",
+    "image": "https://images.unsplash.com/photo-1716908520076-4acd8a09f537?auto=format&fit=crop&fm=jpg&q=85&w=2400",
+    "license": "Unsplash License",
+    "licenseUrl": "https://unsplash.com/license",
+    "width": 2400,
+    "height": 1600,
+    "description": "Woodland cabin interior with a glowing wood-burning stove and trees visible through large windows."
+  },
+  "snow": {
+    "file": "snow.jpg",
+    "title": "Brown wooden house covered with snow during night time",
+    "photographer": "Ranurte",
+    "source": "https://unsplash.com/photos/brown-wooden-house-covered-with-snow-during-night-time-2dLKxroYb_8",
+    "image": "https://images.unsplash.com/photo-1610845469700-dd48f7925891?auto=format&fit=crop&fm=jpg&q=85&w=2400",
+    "license": "Unsplash License",
+    "licenseUrl": "https://unsplash.com/license",
+    "width": 2400,
+    "height": 3200,
+    "description": "A softly lit wooden cabin window amid snow-covered trees at night."
+  },
+  "app-icon": {
+    "file": "app-icon.png",
+    "source": "User-supplied artwork",
+    "originalName": "暮色玫瑰与月光荐.png",
+    "description": "User original artwork; only connected exterior paper border removed with a deterministic alpha mask and crop. Retained artwork pixels unchanged. No generated artwork used."
+  }
+}

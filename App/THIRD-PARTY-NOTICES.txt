@@ -1,0 +1,51 @@
+Carnet PDF third-party and reused resources
+
+Mozilla PDF.js 6.4.299
+https://github.com/mozilla/pdf.js
+Apache License 2.0. Full license: public/vendor/pdfjs/LICENSE.
+Individual font / CMap / WASM notices are retained in their bundled directories.
+
+Carnet theme assets and styling
+Copied locally from the user's existing original local Carnet project directory project.
+The original project is not modified. Theme and presentation values are reused;
+the local environment renderer uses scene-aware effects and a local Raindrop-FX adapter.
+Original themes exposed: Mediterranean, rainy Paris and rose dusk.
+Original image provenance is retained in public/assets/sources.json.
+This local reuse does not assert a license for redistribution of user-provided images.
+
+Node.js runtime (if runtime/node.exe is included)
+https://nodejs.org/
+Runtime license is included as runtime/LICENSE.txt.
+
+Home page poem: Sensation, Arthur Rimbaud (1870), public-domain original French text.
+Text checked against Poésies complètes, L. Vanier, 1895, p. 53:
+https://fr.wikisource.org/wiki/Po%C3%A9sies_(Rimbaud)/%C3%A9d._Vanier,_1895/Sensation
+Only the original poem is reproduced; no modern translation or commentary is used.
+
+Additional Shin-chan riverbank wallpaper
+Generated locally for this project with the built-in image_gen tool.
+Image: public/assets/shinchan.png; exact prompt/mode: public/assets/shinchan.prompt.txt.
+This is a newly generated character illustration, not a copied screenshot or official artwork.
+
+PDF.js viewer components: TextLayerBuilder and DrawLayer are bundled from the
+same pdfjs-dist 6.4.299 distribution, under Apache License 2.0.
+
+Scene effect design references (no Wallpaper Engine code or wallpaper packages bundled):
+https://docs.wallpaperengine.io/en/scene/first/effects.html
+https://docs.wallpaperengine.io/en/scene/effects/effect/waterripple.html
+
+Raindrop-FX 1.0.8 (SardineFish, MIT)
+https://github.com/SardineFish/raindrop-fx
+Pinned commit: bae4081bc15815bb094ea040a976dca083bbc3a5
+Vendored offline bundle: public/vendor/raindrop-fx/raindrop-fx.js
+Full licenses, dependency notices and adapter changes:
+public/vendor/raindrop-fx/NOTICE.txt and LICENSE*.
+No upstream demo photographs or Wallpaper Engine wallpaper packages included.
+
+Additional animation design references (original local implementations):
+https://docs.wallpaperengine.io/en/scene/effects/effect/waterwaves.html
+https://docs.wallpaperengine.io/en/scene/effects/effect/sway.html
+https://docs.wallpaperengine.io/en/scene/effects/effect/shine.html
+https://docs.wallpaperengine.io/en/scene/effects/effect/godrays.html
+https://docs.wallpaperengine.io/en/scene/particles/component/operator.html
+https://github.com/tsparticles/tsparticles/blob/main/markdown/Options/Particles.md

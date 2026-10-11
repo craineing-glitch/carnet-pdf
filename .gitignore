@@ -1,0 +1,29 @@
+# Personal library, original PDFs, annotations and dedicated browser profile.
+/Files/
+/App/data/
+**/browser-profile/
+
+# Installed dependencies, bundled executable runtime and generated releases.
+**/node_modules/
+*.exe
+/App/BUILD.json
+/dist/
+/.work/
+/.build/
+**/playwright-report/
+**/test-results/
+*.log
+*.tmp
+*.bak
+
+# Local credentials and editor/OS metadata.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+Desktop.ini
+/.idea/
+/.vscode/

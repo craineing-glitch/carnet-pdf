@@ -1,0 +1,35 @@
+import {test,expect} from '@playwright/test';
+import {textPdf} from '../fixtures.mjs';
+
+test('real PDF import, text selection, persistent highlights, rename and skins',async({page})=>{
+  const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:/资料库/})).toBeVisible();
+  await page.locator('#file-input').setInputFiles({name:'French notes.pdf',mimeType:'application/pdf',buffer:textPdf()});
+  await expect(page.locator('.textLayer span').first()).toBeVisible();
+  const text=page.locator('.textLayer span').first();
+  await text.evaluate(el=>{const selection=window.getSelection();const range=document.createRange();range.selectNodeContents(el);selection.removeAllRanges();selection.addRange(range);});
+  await text.click({button:'right'});
+  await expect(page.getByRole('menuitem',{name:'高亮所选文字',exact:true})).toBeEnabled();
+  await page.getByRole('menuitem',{name:'高亮所选文字',exact:true}).click();
+  await expect(page.locator('.highlight-layer').locator('[data-highlight-id]').first()).toBeVisible();
+  await page.reload();
+  await page.getByRole('button',{name:/打开 French notes/}).click();
+  await expect(page.locator('.highlight-layer').locator('[data-highlight-id]').first()).toBeVisible();
+  await page.getByRole('button',{name:'文件选项'}).first().click();
+  await page.getByRole('menuitem',{name:'重命名'}).click();
+  await page.getByLabel('文件名称',{exact:true}).fill('Le français');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.getByRole('button',{name:/打开 Le français/})).toBeVisible();
+  await page.getByRole('button',{name:'新增分类'}).click();
+  await page.getByLabel('分类名称').fill('文学');
+  await page.getByRole('button',{name:'创建分类'}).click();
+  await expect(page.getByRole('button',{name:/文学/}).first()).toBeVisible();
+  await page.getByRole('button',{name:'切换环境',exact:true}).click();
+  await expect(page.locator('.theme-card')).toHaveCount(4);
+  await page.getByRole('button',{name:/Paris sous la pluie/}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','paris');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','paris');
+  expect(errors).toEqual([]);
+});

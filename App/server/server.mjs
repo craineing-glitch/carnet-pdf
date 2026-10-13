@@ -102,11 +102,12 @@ export async function createServer({root=defaultRoot,dataDir=root===defaultRoot?
       if(method==='PATCH' && categoryMatch) return json(res,200,await store.patchCategory(categoryMatch[1],await jsonBody(req)));
       if(method==='DELETE' && categoryMatch) return json(res,200,await store.removeCategory(categoryMatch[1]));
       if(method==='PATCH' && pathname==='/api/settings') return json(res,200,await store.patchSettings(await jsonBody(req)));
-      const match=/^\/api\/documents\/([^/]+)(?:\/(file|highlights|bookmarks|restore|permanent)(?:\/([^/]+))?)?$/.exec(pathname);
+      const match=/^\/api\/documents\/([^/]+)(?:\/(file|highlights|bookmarks|restore|permanent|review)(?:\/([^/]+))?)?$/.exec(pathname);
       if(match) {
         const [,id,action,hid]=match;
         if(!action && method==='PATCH') return json(res,200,await store.patchDocument(id,await jsonBody(req)));
         if(!action && method==='DELETE') return json(res,200,await store.trashDocument(id));
+        if(action==='review' && !hid && method==='POST') return json(res,201,await store.collectReview(id,await jsonBody(req)));
         if(action==='restore' && !hid && method==='POST') return json(res,200,await store.restoreDocument(id));
         if(action==='permanent' && !hid && method==='DELETE') return json(res,200,await store.permanentlyDeleteDocument(id));
         if(action==='highlights' && !hid && method==='POST') return json(res,201,await store.addHighlight(id,await jsonBody(req)));

@@ -8,7 +8,7 @@ import {openStore} from '../server/store.mjs';
 import {temporaryDirectory,textPdf} from './fixtures.mjs';
 async function fixture(t){
   const dir=await temporaryDirectory('stream-import-');const store=await openStore(dir);
-  t.after(async()=>{await store.close();await rm(dir,{recursive:true,force:true});});
+  t.after(async()=>{await store.close();await rm(dir,{recursive:true,force:true,maxRetries:5,retryDelay:60});});
   return {dir,store};
 }
 test('streamed PDF preserves bytes when its header is split between chunks',async t=>{

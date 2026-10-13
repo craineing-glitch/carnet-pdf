@@ -4,6 +4,8 @@ import { EnvironmentScene } from './environment.js';
 import { dateGroups, filterDocuments, humanSize } from './library-model.js';
 import { PdfReader } from './reader.js';
 import { AnnotationEditor } from './annotation-editor.js';
+import { formatPageList, reviewEntries, collectionTime } from './review-model.js';
+import { openReviewCollection } from './review-collection.js';
 import { getDocument, GlobalWorkerOptions } from '/vendor/pdfjs/build/pdf.mjs';
 
 const $ = id => document.getElementById(id);
@@ -103,19 +105,34 @@ function applyTheme(id) {
 
 function fileRows(files) {
   if (!files.length) return '<div class="library-empty">' + (tab === 'trash' ? '回收站为空' : '暂无文件') + '</div>';
-  return files.map(d => `<div class="file-row ${d.id === currentId ? 'active' : ''} ${d.deletedAt ? 'is-trashed' : ''}" draggable="${!d.deletedAt}" data-drag-document="${escape(d.id)}">
+  return files.map(d => `<div class="file-row ${d.id === currentId ? 'active' : ''} ${d.deletedAt ? 'is-trashed' : ''} ${d.review ? 'review-file' : ''}" draggable="${!d.deletedAt && !d.review}" data-drag-document="${escape(d.id)}">
     <button class="file-open" data-open="${escape(d.id)}" aria-label="${d.deletedAt ? '回收站文件' : '打开'} ${escape(d.name)}">
       <span class="pdf-icon">PDF</span><span class="file-details"><span class="file-name" title="${escape(d.name)}">${escape(d.name)}</span>
-      <span class="file-meta">${d.deletedAt ? '已删除 · ' : ''}${(d.deletedAt || d.importedAt).slice(5, 10).replace('-', '/')} · ${humanSize(d.size)}</span></span>
+      ${d.review ? `<span class="file-source" title="${escape(d.review.sourceName)} · 第 ${formatPageList(d.review.pages)} 页">${escape(d.review.sourceName)} · 第 ${formatPageList(d.review.pages)} 页</span>` : ''}
+      <span class="file-meta">${d.deletedAt ? '已删除 · ' : ''}${d.review ? collectionTime(d.review.collectedAt) : (d.deletedAt || d.importedAt).slice(5, 10).replace('-', '/')} · ${d.review ? `${d.review.pages.length} 页` : humanSize(d.size)}</span></span>
     </button><button class="file-menu" data-file-menu="${escape(d.id)}" aria-label="文件选项" title="文件选项">⋯</button></div>`).join('');
 }
 
 function renderLibrary() {
-  const active = library.documents.filter(d => !d.deletedAt), trash = library.documents.filter(d => d.deletedAt);
+  const active = library.documents.filter(d => !d.deletedAt && !d.review), trash = library.documents.filter(d => d.deletedAt);
   $('total-count').textContent = active.length;
   for (const kind of ['categories', 'dates', 'trash']) $(kind + '-tab').classList.toggle('active', tab === kind);
   $('trash-count').textContent = trash.length || '';
+  $('review-tab').classList.toggle('active', tab === 'review');
+  $('review-tab').setAttribute('aria-pressed', String(tab === 'review'));
+  $('review-count').textContent = reviewEntries(library.documents).length;
   $('add-category').hidden = tab !== 'categories';
+  if (tab === 'review') {
+    const files = reviewEntries(library.documents, filter.query);
+    const groups = new Map();
+    for (const doc of files) {
+      const day = collectionTime(doc.review.collectedAt).slice(0, 10);
+      if (!groups.has(day)) groups.set(day, []);
+      groups.get(day).push(doc);
+    }
+    $('filters').innerHTML = `<div class="review-shelf"><p class="review-caption">按收录时间 · 最近在前</p>${files.length ? [...groups].map(([day, entries]) => `<section class="review-day"><h3>${formatDate(day)}<span>${entries.length} 份</span></h3>${fileRows(entries)}</section>`).join('') : `<div class="library-empty">${filter.query ? '没有匹配的复习资料' : '把想重读的报道留在这里<br>打开 PDF，点击「收录页面」。'}</div>`}</div>`;
+    return;
+  }
   if (tab === 'trash') {
     const files = trash.filter(d => d.name.toLocaleLowerCase().includes(filter.query.trim().toLocaleLowerCase())).sort((a,b) => b.deletedAt.localeCompare(a.deletedAt));
     $('filters').innerHTML = `<p class="trash-description">删除的文件可在这里还原。</p><div class="trash-files">${fileRows(files)}</div>`;
@@ -142,13 +159,19 @@ function updateBookmarkButton() {
   $('bookmark-button').setAttribute('aria-label', bookmarked ? '移除书签' : '添加书签');
   $('bookmark-button').title = bookmarked ? '移除书签' : '添加书签';
   $('bookmark-button').disabled = bookmarkBusy || !doc || !lastReaderState.pageCount || lastReaderState.loading;
+  $('collect-pages-button').disabled = !doc || Boolean(doc.review) || !lastReaderState.pageCount || lastReaderState.loading;
+  const collected = doc && !doc.review ? reviewEntries(library.documents).filter(item => item.review.sourceId === doc.id && item.review.pages.includes(lastReaderState.page)) : [];
+  $('collection-status').hidden = !collected.length;
+  $('collection-status').textContent = collected.length ? '已收录' : '';
+  $('collection-status').title = collected.map(item => item.name).join('\n');
 }
 
 function updateDocumentHeading() {
   const doc = currentDocument();
   if (!doc) return;
   $('document-title').textContent = doc.name;
-  $('reader-label').textContent = library.categories.find(c => c.id === doc.categoryId)?.name || '全部文件';
+  $('reader-label').textContent = doc.review ? `复习仓库 · ${doc.review.sourceName} · 原第 ${formatPageList(doc.review.pages)} 页` : library.categories.find(c => c.id === doc.categoryId)?.name || '全部文件';
+  $('reader-label').title = $('reader-label').textContent;
   const count = doc.highlights.length + (doc.bookmarks || []).length;
   $('highlight-count').textContent = `笔记${count ? ' · ' + count : ''}`;
   $('highlights-button').disabled = false;
@@ -243,6 +266,7 @@ async function openDocument(id) {
   const doc = library.documents.find(d => d.id === id);
   if (!doc) return;
   if (doc.deletedAt) return toast('此文件在回收站中，请先还原。');
+  if (doc.review) tab = 'review';
   hideMenu();
   cancelWheelZoom();
   const generation = ++openGeneration;
@@ -300,6 +324,8 @@ function dialog(title, html, { wide = false } = {}) {
   hideMenu();
   const el = $('dialog');
   el.classList.toggle('theme-dialog', wide);
+  el.classList.remove('collection-dialog');
+  el.setAttribute('aria-label', title);
   el.innerHTML = `<div class="dialog-heading"><h2>${escape(title)}</h2><button class="icon-button" data-close-dialog aria-label="关闭">×</button></div>${html}`;
   el.showModal();
   el.querySelector('[data-close-dialog]').onclick = closeDialog;
@@ -323,6 +349,22 @@ function editName(id) {
   if (!doc) return;
   const el = formDialog('重命名', `<label class="form-field">文件名称<input name="name" value="${escape(doc.name)}" maxlength="180" required autofocus></label>`, '保存', data => mutate(`/api/documents/${id}`, { method: 'PATCH', body: { name: data.get('name') } }));
   el.querySelector('input').select();
+}
+
+function collectPages() {
+  const source = currentDocument();
+  if (!source || source.review || lastReaderState.loading || !lastReaderState.pageCount) return;
+  openReviewCollection({ source: structuredClone(source), page: lastReaderState.page, pageCount: lastReaderState.pageCount, dialog,
+    collect: async (id, data) => {
+      const before = new Set(library.documents.map(doc => doc.id));
+      const next = await mutate(`/api/documents/${id}/review`, { method: 'POST', body: data });
+      return next.documents.find(doc => doc.review && !before.has(doc.id));
+    },
+    collected: () => {
+      tab = 'review'; filter = { categoryId: '', date: '', query: '' }; $('search').value = '';
+      renderLibrary(); updateBookmarkButton(); toast('已收录到复习仓库');
+    }
+  });
 }
 
 function moveCategory(id) {
@@ -501,8 +543,8 @@ function fileMenu(id, event) {
   event.preventDefault();
   const actions = doc.deletedAt
     ? '<button role="menuitem" data-action="restore">还原</button><button role="menuitem" class="danger-action" data-action="permanent">永久删除</button>'
-    : '<button role="menuitem" data-action="rename">重命名</button><button role="menuitem" data-action="move">移动到分类</button><button role="menuitem" class="danger-action" data-action="trash">移到回收站</button>';
-  showMenu(event.clientX, event.clientY, `${actions}<a role="menuitem" href="/api/documents/${id}/file?download" download="${escape(pdfFileName(doc.name))}">导出原始 PDF</a>`, { id, type: 'file' });
+    : `<button role="menuitem" data-action="rename">重命名</button>${doc.review ? '' : '<button role="menuitem" data-action="move">移动到分类</button>'}<button role="menuitem" class="danger-action" data-action="trash">移到回收站</button>`;
+  showMenu(event.clientX, event.clientY, `${actions}<a role="menuitem" href="/api/documents/${id}/file?download" download="${escape(pdfFileName(doc.name))}">${doc.review ? '导出 PDF' : '导出原始 PDF'}</a>`, { id, type: 'file' });
 }
 function categoryMenu(id, event) {
   if (!library.categories.some(c => c.id === id)) return;
@@ -644,7 +686,7 @@ $('filters').onclick = event => {
   filter.date = tab === 'dates' ? button.dataset.filter : '';
   renderLibrary();
 };
-for (const kind of ['categories', 'dates', 'trash']) $(kind + '-tab').onclick = () => { tab = kind; expandedKey = ''; filter.categoryId = ''; filter.date = ''; renderLibrary(); };
+for (const kind of ['categories', 'dates', 'trash', 'review']) $(kind + '-tab').onclick = () => { tab = kind; expandedKey = ''; filter.categoryId = ''; filter.date = ''; renderLibrary(); };
 document.querySelector('.library').addEventListener('contextmenu', event => {
   event.preventDefault();
   const file = event.target.closest('[data-drag-document]');
@@ -662,6 +704,7 @@ $('highlights-button').onclick = showNotes;
 $('close-notes').onclick = showNotes;
 for (const kind of ['highlights', 'bookmarks']) $('notes-' + kind + '-tab').onclick = () => { notesTab = kind; renderNotes(); };
 $('bookmark-button').onclick = toggleBookmark;
+$('collect-pages-button').onclick = collectPages;
 $('previous-page').onclick = () => reader.goTo(lastReaderState.page - 1).catch(() => {});
 $('next-page').onclick = () => reader.goTo(lastReaderState.page + 1).catch(() => {});
 $('page-number').onchange = event => reader.goTo(Number(event.target.value)).catch(() => {});
@@ -715,7 +758,7 @@ $('filters').addEventListener('drop',async event=>{
   draggedDocument='';dragSuppressUntil=Date.now()+250;
   if(tab!=='categories'||!target||busy)return;
   const doc=library.documents.find(d=>d.id===id),categoryId=target.dataset.filter;
-  if(!doc||doc.deletedAt||doc.categoryId===categoryId||categoryId&&!library.categories.some(c=>c.id===categoryId))return;
+  if(!doc||doc.deletedAt||doc.review||doc.categoryId===categoryId||categoryId&&!library.categories.some(c=>c.id===categoryId))return;
   try{await mutate(`/api/documents/${id}`,{method:'PATCH',body:{categoryId}});toast(`已移至 ${library.categories.find(c=>c.id===categoryId)?.name||'全部文件'}`);}
   catch(error){toast(error.message,true);}
 });

@@ -4,6 +4,12 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 const root=path.resolve(fileURLToPath(new URL('..',import.meta.url)));
 if(process.platform==='win32') await import('./build-native.mjs');
+const extractorVendor=path.join(root,'server/vendor');
+await mkdir(extractorVendor,{recursive:true});
+await cp(path.join(root,'node_modules/pdf-lib/dist/pdf-lib.esm.js'),path.join(extractorVendor,'pdf-lib.mjs'));
+for(const [dependency,license] of [['pdf-lib','LICENSE.md'],['@pdf-lib/standard-fonts','LICENSE.md'],['@pdf-lib/upng','LICENSE'],['pako','LICENSE'],['tslib','LICENSE.txt']]) {
+  await cp(path.join(root,'node_modules',dependency,license),path.join(extractorVendor,'LICENSE-'+dependency.replaceAll('/','-').replace('@','')+'.txt'));
+}
 const vendor=path.join(root,'public/vendor/pdfjs');
 await mkdir(vendor,{recursive:true});
 for(const item of ['build/pdf.mjs','build/pdf.worker.mjs','web/pdf_viewer.css','web/pdf_viewer.mjs','cmaps','standard_fonts','wasm','LICENSE']){

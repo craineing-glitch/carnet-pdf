@@ -2,6 +2,7 @@ import { mkdir, open, readFile, rename, unlink, stat, readdir } from 'node:fs/pr
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { extractPdfPages, PdfExtractionError } from './pdf-extract.mjs';
 
 export const MAX_PDF_BYTES = 1024 * 1024 * 1024;
 export class StoreError extends Error {
@@ -17,6 +18,25 @@ const pageOf = value => {
   if (!Number.isSafeInteger(value) || value < 1 || value > 1000000) invalid('页码无效。');
   return value;
 };
+function reviewOf(value) {
+  if(!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).length!==4 || Object.keys(value).some(key=>!['sourceId','sourceName','pages','collectedAt'].includes(key))) invalid('复习记录无效。');
+  if(typeof value.sourceId!=='string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.sourceId)) invalid('复习来源无效。');
+  nameOf(value.sourceName);
+  if(!Array.isArray(value.pages) || !value.pages.length || value.pages.length>1000000 || value.pages.some((page,index)=>pageOf(page)!==page || (index>0 && page<=value.pages[index-1]))) invalid('复习页码无效。');
+  if(typeof value.collectedAt!=='string' || !Number.isFinite(Date.parse(value.collectedAt))) invalid('收录时间无效。');
+  return value;
+}
+function reviewRequest(value) {
+  if(!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).some(key=>!['pages','name'].includes(key)) || !Array.isArray(value.pages) || !value.pages.length || value.pages.length>1000000) invalid('请选择要收录的页面。');
+  const pages=[...new Set(value.pages.map(pageOf))].sort((a,b)=>a-b);
+  if(value.name!==undefined && typeof value.name!=='string') invalid('名称无效。');
+  const name=value.name?.trim() ? nameOf(value.name) : undefined;
+  return {pages,name};
+}
+function timeName(date) {
+  const pad=value=>String(value).padStart(2,'0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+}
 const colorOf = value => {
   if (typeof value !== 'string' || !/^#[a-fA-F0-9]{6}$/.test(value)) invalid('高亮颜色无效。');
   return value;
@@ -59,6 +79,10 @@ function validateLibrary(lib) {
   for(const doc of lib.documents) {
     if(!identifier(doc.id) || doc.id === 'fr' || doc.id === 'en' || docs.has(doc.id) || (doc.categoryId !== '' && !cats.has(doc.categoryId)) || !Number.isSafeInteger(doc.size) || doc.size < 5 || doc.size > MAX_PDF_BYTES || !Number.isFinite(Date.parse(doc.importedAt)) || !Array.isArray(doc.highlights)) throw Error('Invalid document');
     nameOf(doc.name); pageOf(doc.lastPage); docs.add(doc.id);
+    if(doc.review!==undefined) {
+      reviewOf(doc.review);
+      if(doc.categoryId!=='' || doc.review.sourceId===doc.id) throw Error('Invalid review document');
+    }
     if(doc.deletedAt !== undefined && (typeof doc.deletedAt !== 'string' || !Number.isFinite(Date.parse(doc.deletedAt)))) throw Error('Invalid deletion date');
     const highlights=new Set();
     for(const h of doc.highlights) {
@@ -259,6 +283,22 @@ export async function openStore(dataDir) {
       return importStream(Readable.from([bytes]),{name,categoryId});
     },
     importStream,
+    collectReview(sourceId,value) {return mutate(async next=>{
+      const {pages,name}=reviewRequest(value);
+      const source=documentOf(next,sourceId);
+      if(source.deletedAt) throw new StoreError('请先从回收站恢复这份 PDF，再收录页面。',409);
+      if(source.review) throw new StoreError('这份文件已经在复习仓库中。',409);
+      let bytes;
+      try {bytes=await extractPdfPages(path.join(dataDir,'pdfs',`${source.id}.pdf`),pages,{maxBytes:MAX_PDF_BYTES});}
+      catch(error) {if(error instanceof PdfExtractionError)throw new StoreError(error.message,error.status);throw error;}
+      const id=randomUUID(),now=new Date(),collectedAt=now.toISOString(),file=path.join(dataDir,'pdfs',`${id}.pdf`);
+      const pageMap=new Map(pages.map((page,index)=>[page,index+1]));
+      const remap=marks=>marks.filter(mark=>pageMap.has(mark.page)).map(mark=>({...structuredClone(mark),id:randomUUID(),page:pageMap.get(mark.page)}));
+      const review={id,name:name??timeName(now),categoryId:'',importedAt:collectedAt,size:bytes.length,lastPage:1,highlights:remap(source.highlights),bookmarks:remap(source.bookmarks),review:{sourceId:source.id,sourceName:source.name,pages,collectedAt}};
+      await atomicWrite(file,bytes);
+      next.documents.push(review);
+      return ()=>unlink(file);
+    });},
     trashDocument(id) { return mutate(next=>{
       const doc=documentOf(next,id);
       if(doc.deletedAt) return false;
@@ -286,6 +326,7 @@ export async function openStore(dataDir) {
     patchDocument(id,patch) { return mutate(next=>{
       if(!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k=>!['name','categoryId','lastPage'].includes(k)) || !Object.keys(patch).length) invalid('修改内容无效。');
       const doc=documentOf(next,id);
+      if(doc.review && 'categoryId' in patch) invalid('复习仓库中的文件不能移入资料分类。');
       if('name' in patch) doc.name=nameOf(patch.name);
       if('categoryId' in patch) doc.categoryId=categoryOf(next,patch.categoryId);
       if('lastPage' in patch) doc.lastPage=pageOf(patch.lastPage);

@@ -24,6 +24,7 @@ let busy = false, ready = false, openGeneration = 0, motion = true, highlightCol
 let lastReaderState = { page: 1, pageCount: 0, zoom: 1, loading: false };
 let menuContext = null, toastTimer, bookmarkBusy = false, pendingSaves = 0, draggedDocument = '', dragSuppressUntil = 0;
 let readingFullscreen = false, fullscreenBusy = false, fullscreenRequest = 0;
+let screensaverSaveQueue = Promise.resolve(), pendingScreensaverSettings = null;
 const pendingPositions = new Map();
 const pendingAnnotationDeletes = new Set();
 try {
@@ -139,7 +140,7 @@ function renderLibrary() {
       if (!groups.has(day)) groups.set(day, []);
       groups.get(day).push(doc);
     }
-    $('filters').innerHTML = `<div class="review-shelf"><p class="review-caption">按收录时间 · 最近在前</p>${files.length ? [...groups].map(([day, entries]) => `<section class="review-day"><h3>${formatDate(day)}<span>${entries.length} 份</span></h3>${fileRows(entries)}</section>`).join('') : `<div class="library-empty">${filter.query ? '没有匹配的收藏资料' : '把想重读的报道留在这里<br>打开 PDF，点击「收录页面」。'}</div>`}</div>`;
+    $('filters').innerHTML = `<div class="review-shelf"><p class="review-caption">按收录时间 · 最近在前</p>${files.length ? [...groups].map(([day, entries]) => `<section class="review-day"><h3>${formatDate(day)}<span>${entries.length} 份</span></h3>${fileRows(entries)}</section>`).join('') : `<div class="library-empty">${filter.query ? '没有匹配的收藏资料' : '把想重读的报道留在这里<br>打开 PDF，点击工具栏的爱心。'}</div>`}</div>`;
     return;
   }
   if (tab === 'trash') {
@@ -170,9 +171,8 @@ function updateBookmarkButton() {
   $('bookmark-button').disabled = bookmarkBusy || !doc || !lastReaderState.pageCount || lastReaderState.loading;
   $('collect-pages-button').disabled = !doc || Boolean(doc.review) || !lastReaderState.pageCount || lastReaderState.loading;
   const collected = doc && !doc.review ? reviewEntries(library.documents).filter(item => item.review.sourceId === doc.id && item.review.pages.includes(lastReaderState.page)) : [];
-  $('collection-status').hidden = !collected.length;
-  $('collection-status').textContent = collected.length ? '已收录' : '';
-  $('collection-status').title = collected.map(item => item.name).join('\n');
+  $('collect-pages-button').dataset.collected = String(Boolean(doc?.review || collected.length));
+  $('collect-pages-button').title = doc?.review ? '已在收藏夹' : collected.length ? '本页已收藏 · 收录页面\n' + collected.map(item => item.name).join('\n') : '收藏页面';
 }
 
 function updateDocumentHeading() {
@@ -383,14 +383,44 @@ function moveCategory(id) {
 }
 
 function screensaverSettings() {
-  const settings = library.settings.screensaver || { enabled: true, minutes: 1 };
-  const el = formDialog('屏保设置', `<label class="screensaver-toggle"><input type="checkbox" name="enabled" aria-label="开启屏保" ${settings.enabled ? 'checked' : ''}><span>开启屏保</span></label>
-    <label class="form-field">等待时间（分钟）<input type="number" name="minutes" aria-label="等待时间（分钟）" min="1" max="120" step="1" value="${settings.minutes}" required></label>
-    <p class="dialog-description">没有操作时，显示当前背景、时间与一句话。移动鼠标、点击或按键即可返回，阅读位置和未保存的输入会保留。</p>
-    <button type="button" class="text-button screensaver-preview" data-preview-screensaver>预览屏保</button>`, '保存', data =>
-    mutate('/api/settings', { method: 'PATCH', body: { screensaver: { enabled: data.get('enabled') === 'on', minutes: Number(data.get('minutes')) } } }));
+  const settings = pendingScreensaverSettings || library.settings.screensaver || { enabled: true, minutes: 1 };
+  const el = dialog('屏保设置', `<form class="screensaver-controls" novalidate>
+    <div class="screensaver-control-row"><label class="screensaver-switch" title="开启屏保"><input type="checkbox" role="switch" name="enabled" aria-label="开启屏保" ${settings.enabled ? 'checked' : ''}><span aria-hidden="true"></span></label>
+    <div class="screensaver-wait"><div class="minute-stepper"><input type="number" name="minutes" aria-label="等待时间（分钟）" min="1" max="120" step="1" value="${settings.minutes}" required><div class="minute-arrows"><button type="button" data-step="1" aria-label="增加等待时间"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="m3 5 3-3 3 3"/></svg></button><button type="button" data-step="-1" aria-label="减少等待时间"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="m3 3 3 3 3-3"/></svg></button></div></div><span>分钟</span></div></div>
+    <div class="dialog-error" role="alert" hidden></div></form>`);
   el.classList.add('screensaver-settings-dialog');
-  el.querySelector('[data-preview-screensaver]').onclick = () => screensaver.show();
+  const form = el.querySelector('form'), enabled = form.elements.enabled, minutes = form.elements.minutes, error = form.querySelector('[role="alert"]');
+  let attempt = 0;
+  const commit = () => {
+    if (!minutes.checkValidity()) {
+      minutes.setAttribute('aria-invalid', 'true');
+      error.textContent = '请输入 1–120 的整数分钟。'; error.hidden = false;
+      return;
+    }
+    minutes.removeAttribute('aria-invalid');
+    const next = { enabled: enabled.checked, minutes: Number(minutes.value) };
+    const previous = pendingScreensaverSettings || library.settings.screensaver;
+    if (previous?.enabled === next.enabled && previous.minutes === next.minutes) { error.hidden = true; return; }
+    const generation = ++attempt;
+    error.hidden = true;
+    pendingScreensaverSettings = next;
+    // Serialize automatic saves across dialog closes/reopens so the last choice wins.
+    const saved = screensaverSaveQueue.then(() => mutate('/api/settings', { method: 'PATCH', body: { screensaver: next } }));
+    screensaverSaveQueue = saved.catch(() => {});
+    saved.catch(failure => {
+      if (generation !== attempt || pendingScreensaverSettings !== next) return;
+      const visibleError = el.open && el.classList.contains('screensaver-settings-dialog') ? el.querySelector('[role="alert"]') : null;
+      if (visibleError) { visibleError.textContent = failure.message; visibleError.hidden = false; }
+      else toast(failure.message, true);
+    }).finally(() => { if (pendingScreensaverSettings === next) pendingScreensaverSettings = null; });
+  };
+  form.onchange = commit;
+  form.onsubmit = event => { event.preventDefault(); commit(); };
+  for (const button of form.querySelectorAll('[data-step]')) button.onclick = () => {
+    if (!minutes.checkValidity()) minutes.value = String((pendingScreensaverSettings || library.settings.screensaver).minutes);
+    minutes.stepUp(Number(button.dataset.step)); commit();
+  };
+  el.addEventListener('close', () => { if (el.contains(form)) commit(); }, { once: true });
 }
 
 function addCategory() {

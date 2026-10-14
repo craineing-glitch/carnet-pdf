@@ -87,7 +87,7 @@ test('current-page collection gets a dated name; named excerpts remain separate 
   expect(older.name).toMatch(/\d{4}[-./年]\d{1,2}/);
   expect(older.review.pages).toEqual([3]);
   expect(older.review.sourceName).toBe(source.name);
-  await expect(page.locator('#collection-status')).toContainText('已收录');
+  await expect(page.locator('#collect-pages-button')).toHaveAttribute('data-collected', 'true');
   await expect(page.locator('#total-count')).toHaveText(normalCount);
   await collect(page, '5, 2, 4-5', 'Selected economy articles');
   await expect.poll(async () => (await reviewsFor(page, source.id)).length).toBe(2);

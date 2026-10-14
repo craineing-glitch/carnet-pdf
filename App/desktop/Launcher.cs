@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 [assembly: System.Reflection.AssemblyTitle("Carnet PDF")]
 [assembly: System.Reflection.AssemblyDescription("Carnet PDF desktop launcher")]
-[assembly: System.Reflection.AssemblyVersion("1.12.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.12.1.0")]
 
 internal static class Launcher
 {

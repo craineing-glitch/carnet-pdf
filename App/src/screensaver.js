@@ -39,11 +39,12 @@ export class IdleScreensaver {
     };
     element.tabIndex = -1;
     element.setAttribute('aria-modal', 'true');
-    element.innerHTML = '<div class="screensaver-photo" aria-hidden="true"></div><div class="screensaver-shade" aria-hidden="true"></div><div class="screensaver-content" lang="fr"><div class="screensaver-heading"><p class="screensaver-date"></p><time class="screensaver-clock"></time></div><div class="screensaver-message"><p class="screensaver-motto">Toujours plus loin</p><p class="screensaver-quote"></p></div></div><p class="screensaver-hint">移动鼠标或按任意键，继续阅读</p>';
+    element.innerHTML = '<div class="screensaver-photo" aria-hidden="true"></div><div class="screensaver-shade" aria-hidden="true"></div><div class="screensaver-content" lang="fr"><div class="screensaver-heading"><p class="screensaver-date"></p><time class="screensaver-clock"></time></div><div class="screensaver-message"><p class="screensaver-quote"></p></div></div><p class="screensaver-hint">移动鼠标或按任意键，继续阅读</p>';
     this.photo = element.querySelector('.screensaver-photo');
     this.clock = element.querySelector('time');
     this.date = element.querySelector('.screensaver-date');
     this.quote = element.querySelector('.screensaver-quote');
+    this.quote.textContent = "Demain, dès l'aube, à l'heure où blanchit la campagne,\nJe partirai.";
     this.dateFormatter = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
     this.timeFormatter = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   }
@@ -104,7 +105,6 @@ export class IdleScreensaver {
     const theme = this.getTheme?.() || {};
     this.element.dataset.theme = theme.id || '';
     this.photo.style.backgroundImage = theme.image ? `url(${JSON.stringify(theme.image)})` : 'none';
-    this.quote.textContent = theme.quote || '';
   }
 
   clearClock() {

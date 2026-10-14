@@ -33,23 +33,20 @@
 .screensaver-date { margin: 0 0 4px; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(17px, 2.2vw, 28px); letter-spacing: .035em; }
 .screensaver-date::first-letter { text-transform: uppercase; }
 .screensaver-clock { display: block; font-family: 'Segoe UI', Arial, sans-serif; font-weight: 300; font-variant-numeric: tabular-nums; font-size: clamp(90px, 13.5vw, 186px); letter-spacing: -.065em; line-height: 1.1; padding-right: .065em; }
-.screensaver-message { margin-top: auto; margin-bottom: clamp(96px, 15vh, 170px); padding: 0 24px; }
-.screensaver-motto { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-weight: 400; font-size: clamp(34px, 5vw, 70px); line-height: 1.35; letter-spacing: -.035em; }
-.screensaver-quote { margin: 17px 0 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: clamp(15px, 1.6vw, 22px); line-height: 1.6; letter-spacing: .025em; }
+.screensaver-message { margin-top: auto; margin-bottom: clamp(96px, 15vh, 170px); padding: 0 32px; max-width: 1180px; }
+.screensaver-quote { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-weight: 400; font-size: clamp(20px, 2.45vw, 34px); line-height: 1.7; letter-spacing: .015em; white-space: pre-line; text-wrap: balance; }
 .screensaver-hint { position: absolute; left: 20px; right: 20px; bottom: 27px; margin: 0; text-align: center; color: #fffdf4a8; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 11px; letter-spacing: .13em; text-shadow: 0 1px 8px #0005; }
 @media (max-width: 600px) {
   .screensaver-heading { padding-top: 11vh; }
   .screensaver-clock { font-size: clamp(84px, 24vw, 142px); }
   .screensaver-message { margin-bottom: 16vh; }
-  .screensaver-motto { font-size: clamp(33px, 8vw, 48px); }
-  .screensaver-quote { max-width: 300px; font-size: 16px; }
+  .screensaver-quote { max-width: 440px; font-size: 20px; }
 }
 @media (max-height: 460px) {
   .screensaver-heading { padding-top: 22px; }
   .screensaver-date { font-size: 16px; }
   .screensaver-clock { font-size: 86px; }
   .screensaver-message { margin-bottom: 58px; }
-  .screensaver-motto { font-size: 35px; }
-  .screensaver-quote { margin-top: 6px; font-size: 15px; }
+  .screensaver-quote { font-size: 20px; }
   .screensaver-hint { bottom: 16px; }
 }

@@ -38,7 +38,7 @@ test('idle deadline is one minute; activity resets it but unchanged background s
   await expect(page.locator('#screensaver')).toBeVisible();
   await expect(page.locator('#screensaver time')).toHaveText('09:42');
   await expect(page.locator('.screensaver-date')).toContainText('octobre');
-  await expect(page.locator('.screensaver-quote')).toHaveText('Chaque page ouvre un nouvel horizon.');
+  await expect(page.locator('.screensaver-quote')).toHaveText("Demain, dès l'aube, à l'heure où blanchit la campagne,\nJe partirai.");
   const bounds = await page.locator('#screensaver').boundingBox();
   expect(bounds).toEqual({ x: 0, y: 0, width: 1440, height: 1000 });
   await page.screenshot({ path: testInfo.outputPath('screensaver.png') });
@@ -85,7 +85,7 @@ test('disabled screensaver permits preview and a changed waiting time is respect
   await page.clock.runFor(1);
   await expect(page.locator('#screensaver')).toBeVisible();
   await page.evaluate(() => { window.saverTheme = { image: '/assets/rose-dusk.webp', quote: 'Garder une trace de ce soir.' }; window.saver.configure(); });
-  await expect(page.locator('.screensaver-quote')).toHaveText('Garder une trace de ce soir.');
+  await expect(page.locator('.screensaver-quote')).toHaveText("Demain, dès l'aube, à l'heure où blanchit la campagne,\nJe partirai.");
   await expect(page.locator('.screensaver-photo')).toHaveCSS('background-image', /rose-dusk\.webp/);
   await page.evaluate(() => window.saver.destroy());
   await expect(page.locator('#screensaver')).toBeHidden();
@@ -184,25 +184,158 @@ test.describe('touch wake', () => {
   });
 });
 
-test('screen settings persist and preview preserves their unsaved draft', async ({ page }) => {
+async function storedScreensaverSettings(page) {
+  return (await (await page.request.get('/api/library')).json()).settings.screensaver;
+}
+
+async function openScreensaverSettings(page) {
+  const { token } = await (await page.request.get('/api/session')).json();
+  const reset = await page.request.patch('/api/settings', {
+    headers: { 'x-carnet-token': token },
+    data: { screensaver: { enabled: false, minutes: 1 } },
+  });
+  expect(reset.ok()).toBe(true);
   await page.goto('/');
   await expect(page.locator('#save-status')).toHaveText('已保存');
   await page.locator('#screensaver-settings').click();
-  const settings = page.getByRole('dialog', { name: '屏保设置', exact: true });
+  return page.getByRole('dialog', { name: '屏保设置', exact: true });
+}
+
+test('screen settings save automatically from the switch, number, and step controls and survive reload', async ({ page }) => {
+  const settings = await openScreensaverSettings(page);
   await settings.getByLabel('开启屏保', { exact: true }).check();
   await settings.getByLabel('等待时间（分钟）', { exact: true }).fill('3');
-  await settings.getByRole('button', { name: '预览屏保', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: '屏保', exact: true })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await settings.getByLabel('等待时间（分钟）', { exact: true }).press('Tab');
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: true, minutes: 3 });
+
+  await settings.getByRole('button', { name: '增加等待时间', exact: true }).click();
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: true, minutes: 4 });
+  await settings.getByRole('button', { name: '减少等待时间', exact: true }).click();
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: true, minutes: 3 });
   await expect(settings).toBeVisible();
-  await expect(settings.getByLabel('等待时间（分钟）', { exact: true })).toHaveValue('3');
-  await settings.getByRole('button', { name: '保存', exact: true }).click();
-  await expect(settings).toBeHidden();
+
   await page.reload();
   await expect(page.locator('#save-status')).toHaveText('已保存');
   await page.locator('#screensaver-settings').click();
-  await expect(settings.getByLabel('开启屏保', { exact: true })).toBeChecked();
+  await expect(settings.getByRole('switch', { name: '开启屏保', exact: true })).toBeChecked();
   await expect(settings.getByLabel('等待时间（分钟）', { exact: true })).toHaveValue('3');
-  await settings.getByLabel('开启屏保', { exact: true }).uncheck();
-  await settings.getByRole('button', { name: '保存', exact: true }).click();
+  await settings.getByRole('switch', { name: '开启屏保', exact: true }).uncheck();
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 3 });
+});
+
+test('screen settings keep the latest choices when changes arrive during a slow save', async ({ page }) => {
+  const settings = await openScreensaverSettings(page);
+  let firstRequestStarted = false;
+  let releaseFirst;
+  const firstRequestGate = new Promise(resolve => { releaseFirst = resolve; });
+  await page.route('**/api/settings', async route => {
+    if (!firstRequestStarted) {
+      firstRequestStarted = true;
+      await firstRequestGate;
+    }
+    await route.fulfill({ response: await route.fetch() });
+  });
+
+  try {
+    await settings.getByLabel('开启屏保', { exact: true }).check();
+    await expect.poll(() => firstRequestStarted).toBe(true);
+    const minutes = settings.getByLabel('等待时间（分钟）', { exact: true });
+    await minutes.fill('4');
+    await minutes.press('Tab');
+    await settings.getByRole('button', { name: '增加等待时间', exact: true }).click();
+    await settings.getByLabel('开启屏保', { exact: true }).uncheck();
+  } finally {
+    releaseFirst();
+  }
+
+  await expect(page.locator('#save-status')).toHaveText('已保存');
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 5 });
+  await page.reload();
+  await expect(page.locator('#save-status')).toHaveText('已保存');
+  await page.locator('#screensaver-settings').click();
+  await expect(settings.getByLabel('开启屏保', { exact: true })).not.toBeChecked();
+  await expect(settings.getByLabel('等待时间（分钟）', { exact: true })).toHaveValue('5');
+});
+
+test('screen settings do not submit invalid minutes and can save a corrected value', async ({ page }) => {
+  const settings = await openScreensaverSettings(page);
+  const settingsRequests = [];
+  page.on('request', request => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/settings') settingsRequests.push(request.postDataJSON());
+  });
+  const minutes = settings.getByLabel('等待时间（分钟）', { exact: true });
+  for (const value of ['', '0', '121', '1.5']) {
+    await minutes.fill(value);
+    await minutes.press('Tab');
+    expect(await storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 1 });
+  }
+  expect(settingsRequests).toEqual([]);
+
+  await minutes.fill('4');
+  await minutes.press('Tab');
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 4 });
+});
+
+test('screen settings show a save failure and retry after the next valid edit', async ({ page }) => {
+  const settings = await openScreensaverSettings(page);
+  let failNextSave = true;
+  await page.route('**/api/settings', route => {
+    if (!failNextSave) return route.continue();
+    failNextSave = false;
+    return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: '测试：本机保存失败，请重试。' }) });
+  });
+  const minutes = settings.getByLabel('等待时间（分钟）', { exact: true });
+  await minutes.fill('3');
+  await minutes.press('Tab');
+  await expect(settings.getByRole('alert')).toContainText('保存失败');
+  await expect(minutes).toHaveValue('3');
+  expect(await storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 1 });
+
+  await minutes.fill('4');
+  await minutes.press('Tab');
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 4 });
+  await expect(settings.getByRole('alert')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#save-status')).toHaveText('已保存');
+  await page.locator('#screensaver-settings').click();
+  await expect(minutes).toHaveValue('4');
+});
+
+test('reopened screen settings show a pending save failure and allow retry', async ({ page }) => {
+  const settings = await openScreensaverSettings(page);
+  let firstRequestStarted = false;
+  let releaseFirst;
+  const firstRequestGate = new Promise(resolve => { releaseFirst = resolve; });
+  await page.route('**/api/settings', async route => {
+    if (firstRequestStarted) return route.continue();
+    firstRequestStarted = true;
+    await firstRequestGate;
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: '测试：本机保存失败，请重试。' }) });
+  });
+
+  try {
+    await settings.getByLabel('等待时间（分钟）', { exact: true }).fill('3');
+    await settings.getByLabel('等待时间（分钟）', { exact: true }).press('Tab');
+    await expect.poll(() => firstRequestStarted).toBe(true);
+    await settings.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(settings).toBeHidden();
+    await page.locator('#screensaver-settings').click();
+    await expect(settings.getByLabel('等待时间（分钟）', { exact: true })).toHaveValue('3');
+  } finally {
+    releaseFirst();
+  }
+
+  await expect(settings.getByRole('alert')).toBeVisible();
+  await expect(settings.getByRole('alert')).toContainText('保存失败');
+  expect(await storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 1 });
+
+  const minutes = settings.getByLabel('等待时间（分钟）', { exact: true });
+  await minutes.fill('4');
+  await minutes.press('Tab');
+  await expect.poll(() => storedScreensaverSettings(page)).toEqual({ enabled: false, minutes: 4 });
+  await expect(settings.getByRole('alert')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#save-status')).toHaveText('已保存');
+  await page.locator('#screensaver-settings').click();
+  await expect(minutes).toHaveValue('4');
 });

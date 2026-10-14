@@ -67,9 +67,14 @@ function themeOf(value) {
   if (!['mediterranean','paris','rose-dusk','shinchan'].includes(value)) invalid('主题无效。');
   return value;
 }
+function screensaverOf(value) {
+  if(!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 2 || Object.keys(value).some(key=>!['enabled','minutes'].includes(key)) || typeof value.enabled !== 'boolean' || !Number.isInteger(value.minutes) || value.minutes < 1 || value.minutes > 120) invalid('屏保设置无效。');
+  return {enabled:value.enabled,minutes:value.minutes};
+}
 function validateLibrary(lib) {
   if (!lib || lib.schema !== 1 || !Number.isSafeInteger(lib.revision) || lib.revision < 0 || !Array.isArray(lib.categories) || !Array.isArray(lib.documents)) throw Error('Invalid schema');
   if (typeof lib.settings?.theme !== 'string' || !/^[a-z][a-z0-9-]{0,49}$/.test(lib.settings.theme)) throw Error('Invalid theme');
+  if(Object.hasOwn(lib.settings,'screensaver')) screensaverOf(lib.settings.screensaver);
   const cats=new Set();
   for(const cat of lib.categories) {
     if(!identifier(cat.id) || cats.has(cat.id)) throw Error('Invalid category');
@@ -166,7 +171,7 @@ export async function openStore(dataDir) {
       try { await stat(backupPath); throw new StoreError('目录元数据缺失；已有备份，请恢复 library.json 后再启动。',500); }
       catch(backupError) { if(backupError.code !== 'ENOENT') throw backupError; }
       if((await readdir(path.join(dataDir,'pdfs'))).length) throw new StoreError('目录元数据缺失（missing），但 PDF 文件仍存在。请恢复资料目录后再启动。',500);
-      library={schema:1,revision:0,categories:[{id:'fr',name:'法语'},{id:'en',name:'英语'}],documents:[],settings:{theme:'rose-dusk'}};
+      library={schema:1,revision:0,categories:[{id:'fr',name:'法语'},{id:'en',name:'英语'}],documents:[],settings:{theme:'mediterranean',screensaver:{enabled:true,minutes:1}}};
       await atomicWrite(libraryPath,JSON.stringify(library,null,2));
     }
     if(raw !== undefined) {
@@ -175,6 +180,7 @@ export async function openStore(dataDir) {
         if(Array.isArray(library?.documents)) for(const doc of library.documents) if(doc && typeof doc === 'object') doc.bookmarks ??= [];
         validateLibrary(library);
         if(!['mediterranean','paris','rose-dusk','shinchan'].includes(library.settings.theme)) library.settings.theme='rose-dusk';
+        if(!Object.hasOwn(library.settings,'screensaver')) library.settings.screensaver={enabled:true,minutes:1};
       }
       catch { throw new StoreError('资料元数据损坏（corrupt）。请保留文件并从 library.json.bak 恢复，系统不会覆盖。',500); }
     }
@@ -287,7 +293,7 @@ export async function openStore(dataDir) {
       const {pages,name}=reviewRequest(value);
       const source=documentOf(next,sourceId);
       if(source.deletedAt) throw new StoreError('请先从回收站恢复这份 PDF，再收录页面。',409);
-      if(source.review) throw new StoreError('这份文件已经在复习仓库中。',409);
+      if(source.review) throw new StoreError('这份文件已经在收藏夹中。',409);
       let bytes;
       try {bytes=await extractPdfPages(path.join(dataDir,'pdfs',`${source.id}.pdf`),pages,{maxBytes:MAX_PDF_BYTES});}
       catch(error) {if(error instanceof PdfExtractionError)throw new StoreError(error.message,error.status);throw error;}
@@ -326,7 +332,7 @@ export async function openStore(dataDir) {
     patchDocument(id,patch) { return mutate(next=>{
       if(!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k=>!['name','categoryId','lastPage'].includes(k)) || !Object.keys(patch).length) invalid('修改内容无效。');
       const doc=documentOf(next,id);
-      if(doc.review && 'categoryId' in patch) invalid('复习仓库中的文件不能移入资料分类。');
+      if(doc.review && 'categoryId' in patch) invalid('收藏夹中的文件不能移入资料分类。');
       if('name' in patch) doc.name=nameOf(patch.name);
       if('categoryId' in patch) doc.categoryId=categoryOf(next,patch.categoryId);
       if('lastPage' in patch) doc.lastPage=pageOf(patch.lastPage);
@@ -385,8 +391,12 @@ export async function openStore(dataDir) {
       doc.bookmarks.splice(index,1);
     }); },
     patchSettings(patch) { return mutate(next=>{
-      if(!patch || typeof patch !== 'object' || Object.keys(patch).length !== 1 || !('theme' in patch)) invalid('设置无效。');
-      next.settings.theme=themeOf(patch.theme);
+      if(!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length || Object.keys(patch).some(key=>!['theme','screensaver'].includes(key))) invalid('设置无效。');
+      const theme=Object.hasOwn(patch,'theme') ? themeOf(patch.theme) : next.settings.theme;
+      const screensaver=Object.hasOwn(patch,'screensaver') ? screensaverOf(patch.screensaver) : next.settings.screensaver;
+      if(theme === next.settings.theme && screensaver.enabled === next.settings.screensaver.enabled && screensaver.minutes === next.settings.screensaver.minutes) return false;
+      next.settings.theme=theme;
+      next.settings.screensaver=screensaver;
     }); },
     close() { if(!closing) {closed=true;closing=queue.then(release);}return closing; },
   };

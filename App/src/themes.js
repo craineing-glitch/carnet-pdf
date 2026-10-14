@@ -13,6 +13,6 @@ const carnetThemes=[
 const shinchan={id:'shinchan',name:'蜡笔小新',place:'春日部',image:'/assets/shinchan.png',cover:'/assets/shinchan.png',color:'#56705b',glass:'#e6dfc1',paper:'#fff7e8',ink:'#334b3b',accent:'#d89c79',font:'Georgia',effect:'sunshine',quote:'Un après-midi au bord de la rivière.',channels:[],weather:'黄昏',temperature:''};
 export const themes=[...carnetThemes.filter(t=>['mediterranean','paris','rose-dusk'].includes(t.id)),shinchan];
 export const availableThemes=themes;
-export const getTheme=id=>themes.find(t=>t.id===id)||themes.find(t=>t.id==='rose-dusk');
+export const getTheme=id=>themes.find(t=>t.id===id)||themes.find(t=>t.id==='mediterranean');
 export const types=[['text','Texte','text'],['photo','Photo','image'],['mood','Humeur','heart'],['weather','Météo','sun'],['location','Lieu','pin'],['quote','Citation','quote'],['heading','Titre','type'],['memory','Souvenir','spark']];
 export const defaultLevels=theme=>Object.fromEntries(theme.channels.map(([id,,value])=>[id,value]));

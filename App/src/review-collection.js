@@ -6,7 +6,7 @@ const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '
 export function openReviewCollection({ source, page, pageCount, dialog, collect, collected }) {
   const highlighted = [...new Set(source.highlights.map(item => item.page))].filter(p => p <= pageCount);
   const bookmarked = (source.bookmarks || []).map(item => item.page).filter(p => p <= pageCount);
-  const el = dialog('收录到复习仓库', `<form class="collection-form">
+  const el = dialog('收录到收藏夹', `<form class="collection-form">
     <p class="collection-source" title="${escape(source.name)}">${escape(source.name)}<span>共 ${pageCount} 页</span></p>
     <label class="form-field">收录页码<input name="pages" aria-label="收录页码" value="${page}" maxlength="4000" autocomplete="off" required autofocus></label>
     <div class="collection-shortcuts"><button type="button" data-page-choice="current">当前页</button><button type="button" data-page-choice="highlights" ${highlighted.length ? '' : 'disabled'}>有高亮的页</button><button type="button" data-page-choice="bookmarks" ${bookmarked.length ? '' : 'disabled'}>有书签的页</button></div>

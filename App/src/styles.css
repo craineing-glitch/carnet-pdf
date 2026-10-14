@@ -154,3 +154,7 @@
 @media(max-width:1050px){.collection-tools{order:3;flex-basis:100%;justify-content:flex-end}.review-entry{padding:9px 8px}}
 
 [data-presentation="dark"] .collection-dialog{background:var(--editor-panel),#17201ed9;border-color:#ffffff50;backdrop-filter:blur(22px) saturate(1.1);-webkit-backdrop-filter:blur(22px) saturate(1.1)}
+
+:root[data-theme="mediterranean"]{--editor-ink:#10262b;--chrome-ink:#10262b;--editor-panel:linear-gradient(130deg,rgba(255,250,236,.25),rgba(248,244,227,.23));--surface-glass:rgba(249,249,237,.32);--control-glass:rgba(253,250,237,.43)}
+html[data-theme="mediterranean"] .scene-photo{background-image:url('/assets/terrace.png');background-position:center 58%}
+.footer-settings{display:flex;align-items:center;gap:20px}.footer-settings>button{white-space:nowrap}.screensaver-toggle{display:flex;align-items:center;gap:10px;font-size:13px;margin:8px 0 22px}.screensaver-toggle input{width:18px;height:18px;margin:0;accent-color:var(--teal)}.screensaver-preview{padding:9px 13px;border:1px solid #ffffff50;border-radius:8px;background:var(--control-glass)}.screensaver-settings-dialog{background:var(--editor-panel),#edf0e3d9;backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}[data-presentation="dark"] .screensaver-settings-dialog{background:var(--editor-panel),#17201ed9;border-color:#ffffff50}

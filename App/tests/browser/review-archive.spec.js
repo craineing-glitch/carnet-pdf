@@ -40,7 +40,7 @@ async function goToPage(page, number) {
 
 async function collect(page, pages, name) {
   await page.getByRole('button', { name: '收录页面', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '收录到复习仓库', exact: true });
+  const dialog = page.getByRole('dialog', { name: '收录到收藏夹', exact: true });
   if (pages !== undefined) await dialog.getByLabel('收录页码', { exact: true }).fill(pages);
   if (name !== undefined) await dialog.getByLabel('资料名称', { exact: true }).fill(name);
   await dialog.getByRole('button', { name: '收录', exact: true }).click();
@@ -78,7 +78,7 @@ test('current-page collection gets a dated name; named excerpts remain separate 
   const reviewCount = Number(await page.locator('#review-count').textContent()) || 0;
   await goToPage(page, 3);
   await page.getByRole('button', { name: '收录页面', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '收录到复习仓库', exact: true });
+  const dialog = page.getByRole('dialog', { name: '收录到收藏夹', exact: true });
   await expect(dialog.getByLabel('收录页码', { exact: true })).toHaveValue('3');
   await dialog.getByRole('button', { name: '收录', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -94,7 +94,7 @@ test('current-page collection gets a dated name; named excerpts remain separate 
   const newer = (await reviewsFor(page, source.id)).find(doc => doc.id !== older.id);
   expect(newer.review.pages).toEqual([2, 4, 5]);
   expect(Date.parse(newer.review.collectedAt)).toBeGreaterThan(Date.parse(older.review.collectedAt));
-  await page.getByRole('button', { name: '复习仓库', exact: true }).click();
+  await page.getByRole('button', { name: '收藏夹', exact: true }).click();
   await expect(page.locator('#review-count')).toHaveText(String(reviewCount + 2));
   const visibleOrder = await page.locator('#filters [data-open]').evaluateAll(nodes => nodes.map(node => node.dataset.open));
   expect(visibleOrder.indexOf(newer.id)).toBeLessThan(visibleOrder.indexOf(older.id));
@@ -112,7 +112,7 @@ test('current-page collection gets a dated name; named excerpts remain separate 
   await expect(entry(page, newer.id)).toContainText('Review these articles again.pdf');
   await page.reload();
   await expect(page.locator('#save-status')).toHaveText('已保存');
-  await page.getByRole('button', { name: '复习仓库', exact: true }).click();
+  await page.getByRole('button', { name: '收藏夹', exact: true }).click();
   await expect(entry(page, newer.id)).toContainText('Review these articles again.pdf');
   expect((await documentById(page, newer.id)).review.collectedAt).toBe(newer.review.collectedAt);
   await entry(page, newer.id).click();
@@ -154,7 +154,7 @@ test('nonconsecutive excerpts contain only selected pages and copied notes even 
   await mutation(page, 'DELETE', `/api/documents/${source.id}/permanent`);
   await page.reload();
   await expect(page.locator('#save-status')).toHaveText('已保存');
-  await page.getByRole('button', { name: '复习仓库', exact: true }).click();
+  await page.getByRole('button', { name: '收藏夹', exact: true }).click();
   await expect(entry(page, excerpt.id)).toContainText(source.name);
   await entry(page, excerpt.id).click();
   await expect(page.locator('#page-count')).toHaveText('3');
@@ -177,7 +177,7 @@ test('nonconsecutive excerpts contain only selected pages and copied notes even 
   await page.getByRole('button', { name: /^回收站/ }).click();
   await options(page, excerpt.id).click();
   await menu(page).getByRole('menuitem', { name: '还原', exact: true }).click();
-  await page.getByRole('button', { name: '复习仓库', exact: true }).click();
+  await page.getByRole('button', { name: '收藏夹', exact: true }).click();
   await expect(entry(page, excerpt.id)).toBeVisible();
   expect((await documentById(page, excerpt.id)).review).toEqual(excerpt.review);
 });
@@ -185,7 +185,7 @@ test('nonconsecutive excerpts contain only selected pages and copied notes even 
 test('invalid pages and failed saves keep the collection editable without creating partial excerpts', async ({ page }) => {
   const source = await openPaper(page, 'Validate collection input.pdf');
   await page.getByRole('button', { name: '收录页面', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '收录到复习仓库', exact: true });
+  const dialog = page.getByRole('dialog', { name: '收录到收藏夹', exact: true });
   for (const invalid of ['0', '7', '4-2', '1.5', '2,word']) {
     await dialog.getByLabel('收录页码', { exact: true }).fill(invalid);
     await dialog.getByRole('button', { name: '收录', exact: true }).click();

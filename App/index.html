@@ -1,18 +1,19 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="rose-dusk" data-presentation="dark">
+<html lang="zh-CN" data-theme="mediterranean" data-presentation="light">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light"><title>Carnet · PDF 阅读器</title>
-  <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png?v=1.6.0">
-  <link rel="apple-touch-icon" href="/assets/app-icon.png?v=1.6.0">
+  <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png?v=1.12.0">
+  <link rel="apple-touch-icon" href="/assets/app-icon.png?v=1.12.0">
   <link rel="stylesheet" href="/vendor/pdfjs/web/pdf_viewer.css">
   <link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/reader.css">
+  <link rel="stylesheet" href="/src/screensaver.css">
 </head>
 <body>
   <div class="environment" aria-hidden="true"><div class="scene-photo"></div><div id="effects"></div><div class="scene-wash"></div></div>
   <div class="app-shell">
     <header class="app-header">
-      <a class="brand" href="/" aria-label="Carnet 阅读器首页"><span class="brand-mark"><img src="/assets/app-icon.png?v=1.6.0" alt="" aria-hidden="true"></span><span>Carnet<span class="brand-sub">BIBLIOTHÈQUE PERSONNELLE</span></span></a>
+      <a class="brand" href="/" aria-label="Carnet 阅读器首页"><span class="brand-mark"><img src="/assets/app-icon.png?v=1.12.0" alt="" aria-hidden="true"></span><span>Carnet<span class="brand-sub">BIBLIOTHÈQUE PERSONNELLE</span></span></a>
       <div class="header-right"><button class="theme-trigger glass-control" id="theme-button" aria-label="切换环境"><span class="theme-dot"></span><span id="theme-name">Méditerranée</span><span>⌄</span></button></div>
     </header>
     <main class="workspace">
@@ -20,7 +21,7 @@
         <div class="library-heading"><h1>资料库 <span id="total-count">0</span></h1><button id="import-button" class="round-button" aria-label="导入 PDF" title="导入 PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
         <label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="搜索文件名称" aria-label="搜索文件名称" autocomplete="off"><kbd>/</kbd></label>
         <div class="navigation-tabs" role="group" aria-label="浏览方式"><button class="active" id="categories-tab">分类</button><button id="dates-tab">日期</button><button id="trash-tab" aria-label="回收站">回收站 <span id="trash-count"></span></button></div>
-        <button id="review-tab" class="review-entry" aria-label="复习仓库" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v15H5zM8 2h8M8 9h8M8 13h5"/></svg><span>复习仓库</span><span id="review-count">0</span><span aria-hidden="true">›</span></button>
+        <button id="review-tab" class="review-entry" aria-label="收藏夹" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg><span>收藏夹</span><span id="review-count">0</span><span aria-hidden="true">›</span></button>
         <nav id="filters" aria-label="文件筛选"></nav>
         <button id="add-category" class="quiet-button add-category" aria-label="新增分类">＋ 新增分类</button>
         <div class="library-footer"><p><span class="status-dot"></span><span id="save-status" role="status">连接中…</span></p></div>
@@ -55,10 +56,11 @@
         <footer class="reader-footer"><span id="reader-hint"></span><span id="reader-footer-right">PDF</span></footer>
       </section>
     </main>
-    <footer class="app-footer"><span id="scene-quote">Le bonheur se cache dans les détails.</span><button id="motion-button" class="quiet-button" aria-label="切换环境动画">环境动态 · 开</button><span>CARNET <i>reader</i></span></footer>
+    <footer class="app-footer"><span id="scene-quote">Le bonheur se cache dans les détails.</span><div class="footer-settings"><button id="motion-button" class="quiet-button" aria-label="切换环境动画">环境动态 · 开</button><button id="screensaver-settings" class="quiet-button" aria-label="屏保设置">屏保</button></div><span>CARNET <i>reader</i></span></footer>
   </div>
   <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
   <dialog id="dialog" class="app-dialog"></dialog>
+  <dialog id="screensaver" aria-label="屏保"></dialog>
   <section id="annotation-editor" class="annotation-editor" role="dialog" aria-modal="false" aria-label="添加批注" hidden></section>
   <div id="context-menu" class="context-menu" role="menu" hidden></div>
   <div id="toast" class="toast" role="status" hidden></div>

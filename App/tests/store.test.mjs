@@ -18,7 +18,7 @@ test('imports raw PDF and preserves metadata and highlights across restart', asy
   const {store, dir} = await fixture(t);
   const initial = store.getLibrary();
   assert.deepEqual(initial.categories, [{id:'fr',name:'法语'},{id:'en',name:'英语'}]);
-  assert.equal(initial.settings.theme, 'rose-dusk');
+  assert.equal(initial.settings.theme, 'mediterranean');
   let lib = await store.importDocument(textPdf(), {name:'Français.pdf',categoryId:'fr'});
   const doc = lib.documents[0];
   assert.match(doc.importedAt, /^\d{4}-\d{2}-\d{2}T/);

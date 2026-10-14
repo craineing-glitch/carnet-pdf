@@ -6,6 +6,7 @@ import { PdfReader } from './reader.js';
 import { AnnotationEditor } from './annotation-editor.js';
 import { formatPageList, reviewEntries, collectionTime } from './review-model.js';
 import { openReviewCollection } from './review-collection.js';
+import { IdleScreensaver } from './screensaver.js';
 import { getDocument, GlobalWorkerOptions } from '/vendor/pdfjs/build/pdf.mjs';
 
 const $ = id => document.getElementById(id);
@@ -16,7 +17,7 @@ const colors = [
   { value: '#9fc8ff', name: '蓝色' }, { value: '#f5aac8', name: '粉色' },
   { value: '#c9b2ff', name: '紫色' }
 ];
-let library = { revision: -1, categories: [], documents: [], settings: { theme: 'rose-dusk' } };
+let library = { revision: -1, categories: [], documents: [], settings: { theme: 'mediterranean', screensaver: { enabled: true, minutes: 1 } } };
 let token = '', currentId = '', filter = { categoryId: '', date: '', query: '' };
 let tab = 'categories', expandedKey = '', notesTab = 'highlights';
 let busy = false, ready = false, openGeneration = 0, motion = true, highlightColor = colors[0].value;
@@ -33,6 +34,13 @@ try {
 const scene = new EnvironmentScene($('effects'));
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const reader = new PdfReader({ host: $('reader-host'), onState: readerState, onError: message => toast(message, true) });
+const screensaver = new IdleScreensaver({
+  element: $('screensaver'),
+  getTheme: () => getTheme(library.settings.theme),
+  getSettings: () => library.settings.screensaver || { enabled: true, minutes: 1 },
+  onShow: () => { hideMenu(); scene.set(getTheme(library.settings.theme), 'still'); },
+  onHide: () => scene.set(getTheme(library.settings.theme), motion && !reducedMotion.matches ? 'gentle' : 'still')
+});
 const currentDocument = () => library.documents.find(d => d.id === currentId);
 
 function toast(message, error = false) {
@@ -60,6 +68,7 @@ async function api(url, { method = 'GET', body, headers = {} } = {}) {
 function accept(next) {
   if (next.revision < library.revision) return;
   library = next;
+  screensaver.configure();
   renderLibrary();
   const doc = currentDocument();
   if (currentId && (!doc || doc.deletedAt)) { showHome(); return; }
@@ -96,7 +105,7 @@ function applyTheme(id) {
   document.querySelector('.scene-photo').style.backgroundPosition = theme.id === 'shinchan' ? 'right center' : theme.id === 'rose-dusk' ? 'center 47%' : theme.id === 'mediterranean' ? 'center 58%' : 'center';
   $('theme-name').textContent = theme.name;
   $('scene-quote').textContent = theme.quote;
-  const animated = motion && !reducedMotion.matches && theme.effect !== 'none';
+  const animated = motion && !reducedMotion.matches && !screensaver.active && theme.effect !== 'none';
   scene.set(theme, animated ? 'gentle' : 'still');
   $('motion-button').textContent = `动态 · ${motion && reducedMotion.matches ? '系统已关闭' : motion ? '开' : '关'}`;
   $('motion-button').setAttribute('aria-pressed', String(animated));
@@ -130,7 +139,7 @@ function renderLibrary() {
       if (!groups.has(day)) groups.set(day, []);
       groups.get(day).push(doc);
     }
-    $('filters').innerHTML = `<div class="review-shelf"><p class="review-caption">按收录时间 · 最近在前</p>${files.length ? [...groups].map(([day, entries]) => `<section class="review-day"><h3>${formatDate(day)}<span>${entries.length} 份</span></h3>${fileRows(entries)}</section>`).join('') : `<div class="library-empty">${filter.query ? '没有匹配的复习资料' : '把想重读的报道留在这里<br>打开 PDF，点击「收录页面」。'}</div>`}</div>`;
+    $('filters').innerHTML = `<div class="review-shelf"><p class="review-caption">按收录时间 · 最近在前</p>${files.length ? [...groups].map(([day, entries]) => `<section class="review-day"><h3>${formatDate(day)}<span>${entries.length} 份</span></h3>${fileRows(entries)}</section>`).join('') : `<div class="library-empty">${filter.query ? '没有匹配的收藏资料' : '把想重读的报道留在这里<br>打开 PDF，点击「收录页面」。'}</div>`}</div>`;
     return;
   }
   if (tab === 'trash') {
@@ -170,7 +179,7 @@ function updateDocumentHeading() {
   const doc = currentDocument();
   if (!doc) return;
   $('document-title').textContent = doc.name;
-  $('reader-label').textContent = doc.review ? `复习仓库 · ${doc.review.sourceName} · 原第 ${formatPageList(doc.review.pages)} 页` : library.categories.find(c => c.id === doc.categoryId)?.name || '全部文件';
+  $('reader-label').textContent = doc.review ? `收藏夹 · ${doc.review.sourceName} · 原第 ${formatPageList(doc.review.pages)} 页` : library.categories.find(c => c.id === doc.categoryId)?.name || '全部文件';
   $('reader-label').title = $('reader-label').textContent;
   const count = doc.highlights.length + (doc.bookmarks || []).length;
   $('highlight-count').textContent = `笔记${count ? ' · ' + count : ''}`;
@@ -324,7 +333,7 @@ function dialog(title, html, { wide = false } = {}) {
   hideMenu();
   const el = $('dialog');
   el.classList.toggle('theme-dialog', wide);
-  el.classList.remove('collection-dialog');
+  el.classList.remove('collection-dialog', 'screensaver-settings-dialog');
   el.setAttribute('aria-label', title);
   el.innerHTML = `<div class="dialog-heading"><h2>${escape(title)}</h2><button class="icon-button" data-close-dialog aria-label="关闭">×</button></div>${html}`;
   el.showModal();
@@ -362,7 +371,7 @@ function collectPages() {
     },
     collected: () => {
       tab = 'review'; filter = { categoryId: '', date: '', query: '' }; $('search').value = '';
-      renderLibrary(); updateBookmarkButton(); toast('已收录到复习仓库');
+      renderLibrary(); updateBookmarkButton(); toast('已收录到收藏夹');
     }
   });
 }
@@ -371,6 +380,17 @@ function moveCategory(id) {
   const doc = library.documents.find(d => d.id === id);
   if (!doc) return;
   formDialog('移动到分类', `<label class="form-field">文件分类<select name="categoryId" aria-label="文件分类"><option value="" ${!doc.categoryId ? 'selected' : ''}>全部文件</option>${library.categories.map(c => `<option value="${escape(c.id)}" ${doc.categoryId === c.id ? 'selected' : ''}>${escape(c.name)}</option>`).join('')}</select></label>`, '保存', data => mutate(`/api/documents/${id}`, { method: 'PATCH', body: { categoryId: data.get('categoryId') } }));
+}
+
+function screensaverSettings() {
+  const settings = library.settings.screensaver || { enabled: true, minutes: 1 };
+  const el = formDialog('屏保设置', `<label class="screensaver-toggle"><input type="checkbox" name="enabled" aria-label="开启屏保" ${settings.enabled ? 'checked' : ''}><span>开启屏保</span></label>
+    <label class="form-field">等待时间（分钟）<input type="number" name="minutes" aria-label="等待时间（分钟）" min="1" max="120" step="1" value="${settings.minutes}" required></label>
+    <p class="dialog-description">没有操作时，显示当前背景、时间与一句话。移动鼠标、点击或按键即可返回，阅读位置和未保存的输入会保留。</p>
+    <button type="button" class="text-button screensaver-preview" data-preview-screensaver>预览屏保</button>`, '保存', data =>
+    mutate('/api/settings', { method: 'PATCH', body: { screensaver: { enabled: data.get('enabled') === 'on', minutes: Number(data.get('minutes')) } } }));
+  el.classList.add('screensaver-settings-dialog');
+  el.querySelector('[data-preview-screensaver]').onclick = () => screensaver.show();
 }
 
 function addCategory() {
@@ -713,6 +733,7 @@ $('zoom-in').onclick = () => { cancelWheelZoom(); reader.setZoom(lastReaderState
 $('fit-width').onclick = () => { cancelWheelZoom(); reader.setZoom('fit').catch(() => {}); };
 $('rotate-page').onclick = () => { cancelWheelZoom(); reader.rotate().catch(() => {}); };
 $('motion-button').onclick = () => { motion = !motion; try { localStorage.setItem('carnet-pdf-motion', motion ? 'on' : 'off'); } catch {} applyTheme(library.settings.theme); };
+$('screensaver-settings').onclick = screensaverSettings;
 document.addEventListener('pointerdown', event => { if (!event.target.closest('#context-menu') && !event.target.closest('[data-file-menu]')) hideMenu(); });
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
@@ -781,6 +802,7 @@ async function initialize() {
     ({ token } = await api('/api/session'));
     accept(await api('/api/library'));
     ready = true;
+    screensaver.start();
     $('save-status').textContent = '已保存';
     applyTheme(library.settings.theme);
     let remembered = '';
@@ -793,5 +815,5 @@ async function initialize() {
     toast(error.message, true);
   }
 }
-applyTheme('rose-dusk');
+applyTheme('mediterranean');
 initialize();

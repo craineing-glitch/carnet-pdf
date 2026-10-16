@@ -4,9 +4,27 @@ export function dateGroups(documents) {
   for (const document of documents) { const date = importDate(document); groups.set(date, (groups.get(date) || 0) + 1); }
   return [...groups].sort(([a],[b])=>b.localeCompare(a)).map(([date,count])=>({date,count}));
 }
-export function filterDocuments(documents, {categoryId='', date='', query=''}={}) {
+const names = new Intl.Collator('zh-CN', {numeric:true,sensitivity:'base'});
+export function sortDocuments(documents, {sort='newest',order=[]}={}) {
+  const newest=(a,b)=>b.importedAt.localeCompare(a.importedAt);
+  const positions=new Map(order.map((id,index)=>[id,index]));
+  return [...documents].sort((a,b)=>{
+    if(sort==='oldest')return -newest(a,b);
+    if(sort==='name-asc')return names.compare(a.name,b.name);
+    if(sort==='name-desc')return names.compare(b.name,a.name);
+    if(sort==='manual') {
+      const left=positions.get(a.id),right=positions.get(b.id);
+      if(left===undefined&&right===undefined)return newest(a,b);
+      if(left===undefined)return -1;
+      if(right===undefined)return 1;
+      return left-right;
+    }
+    return newest(a,b);
+  });
+}
+export function filterDocuments(documents, {categoryId='', date='', query='',sort='newest',order=[]}={}) {
   const needle = query.trim().toLocaleLowerCase();
-  return documents.filter(document=>(!categoryId||document.categoryId===categoryId)&&(!date||importDate(document)===date)&&(!needle||document.name.toLocaleLowerCase().includes(needle))).sort((a,b)=>b.importedAt.localeCompare(a.importedAt));
+  return sortDocuments(documents.filter(document=>(!categoryId||document.categoryId===categoryId)&&(!date||importDate(document)===date)&&(!needle||document.name.toLocaleLowerCase().includes(needle))),{sort,order});
 }
 export function humanSize(bytes) {
   if(bytes<1024)return `${bytes} B`;

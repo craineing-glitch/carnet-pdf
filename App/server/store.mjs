@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { extractPdfPages, PdfExtractionError } from './pdf-extract.mjs';
+import { sortDocuments } from '../src/library-model.js';
 
 export const MAX_PDF_BYTES = 1024 * 1024 * 1024;
 export class StoreError extends Error {
@@ -71,10 +72,19 @@ function screensaverOf(value) {
   if(!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 2 || Object.keys(value).some(key=>!['enabled','minutes'].includes(key)) || typeof value.enabled !== 'boolean' || !Number.isInteger(value.minutes) || value.minutes < 1 || value.minutes > 120) invalid('屏保设置无效。');
   return {enabled:value.enabled,minutes:value.minutes};
 }
+function librarySortOf(value) {
+  if(!['newest','oldest','name-asc','name-desc','manual'].includes(value)) invalid('文件排序方式无效。');
+  return value;
+}
+function trashSnapshot(value) {
+  if(!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).length!==1 || !Array.isArray(value.ids) || value.ids.length>100000 || value.ids.some(id=>typeof id!=='string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(id)) || new Set(value.ids).size!==value.ids.length) invalid('回收站清理内容无效。');
+  return new Set(value.ids);
+}
 function validateLibrary(lib) {
   if (!lib || lib.schema !== 1 || !Number.isSafeInteger(lib.revision) || lib.revision < 0 || !Array.isArray(lib.categories) || !Array.isArray(lib.documents)) throw Error('Invalid schema');
   if (typeof lib.settings?.theme !== 'string' || !/^[a-z][a-z0-9-]{0,49}$/.test(lib.settings.theme)) throw Error('Invalid theme');
   if(Object.hasOwn(lib.settings,'screensaver')) screensaverOf(lib.settings.screensaver);
+  if(Object.hasOwn(lib.settings,'librarySort')) librarySortOf(lib.settings.librarySort);
   const cats=new Set();
   for(const cat of lib.categories) {
     if(!identifier(cat.id) || cats.has(cat.id)) throw Error('Invalid category');
@@ -101,6 +111,10 @@ function validateLibrary(lib) {
       bookmarkOf({page:bookmark.page,label:bookmark.label});
       bookmarks.add(bookmark.id);pages.add(bookmark.page);
     }
+  }
+  if(Object.hasOwn(lib.settings,'documentOrder')) {
+    const order=lib.settings.documentOrder,active=new Set(lib.documents.filter(doc=>!doc.deletedAt&&!doc.review).map(doc=>doc.id));
+    if(!Array.isArray(order) || order.some(id=>!active.has(id)) || new Set(order).size!==order.length) throw Error('Invalid document order');
   }
 }
 async function atomicWrite(file, bytes) {
@@ -171,7 +185,7 @@ export async function openStore(dataDir) {
       try { await stat(backupPath); throw new StoreError('目录元数据缺失；已有备份，请恢复 library.json 后再启动。',500); }
       catch(backupError) { if(backupError.code !== 'ENOENT') throw backupError; }
       if((await readdir(path.join(dataDir,'pdfs'))).length) throw new StoreError('目录元数据缺失（missing），但 PDF 文件仍存在。请恢复资料目录后再启动。',500);
-      library={schema:1,revision:0,categories:[{id:'fr',name:'法语'},{id:'en',name:'英语'}],documents:[],settings:{theme:'mediterranean',screensaver:{enabled:true,minutes:1}}};
+      library={schema:1,revision:0,categories:[{id:'fr',name:'法语'},{id:'en',name:'英语'}],documents:[],settings:{theme:'mediterranean',screensaver:{enabled:true,minutes:1},librarySort:'newest',documentOrder:[]}};
       await atomicWrite(libraryPath,JSON.stringify(library,null,2));
     }
     if(raw !== undefined) {
@@ -181,6 +195,8 @@ export async function openStore(dataDir) {
         validateLibrary(library);
         if(!['mediterranean','paris','rose-dusk','shinchan'].includes(library.settings.theme)) library.settings.theme='rose-dusk';
         if(!Object.hasOwn(library.settings,'screensaver')) library.settings.screensaver={enabled:true,minutes:1};
+        if(!Object.hasOwn(library.settings,'librarySort')) library.settings.librarySort='newest';
+        if(!Object.hasOwn(library.settings,'documentOrder')) library.settings.documentOrder=[];
       }
       catch { throw new StoreError('资料元数据损坏（corrupt）。请保留文件并从 library.json.bak 恢复，系统不会覆盖。',500); }
     }
@@ -256,6 +272,38 @@ export async function openStore(dataDir) {
     if(!lib.categories.some(c=>c.id===id)) invalid('分类不存在。');
     return id;
   };
+  const stageDeletion=async(next,documents)=>{
+    const staged=[];
+    const rollback=async()=>{
+      const failures=[];
+      for(const item of [...staged].reverse()) try {await rename(item.staged,item.file);} catch(error) {failures.push(error);}
+      if(failures.length) throw new AggregateError(failures,'PDF 删除恢复未能完全完成。');
+    };
+    try {
+      for(const doc of documents) {
+        const file=path.join(dataDir,'pdfs',`${doc.id}.pdf`),pending=file+'.deleting';
+        const existing=await stat(pending).catch(error=>{if(error.code!=='ENOENT')throw error;return null;});
+        if(existing) throw new StoreError('有待恢复的 PDF 清理，请重新启动阅读器后重试。',409);
+        await rename(file,pending);
+        staged.push({file,staged:pending});
+      }
+    } catch(error) {
+      try {await rollback();} catch(failure) {throw new AggregateError([error,failure],'删除失败，资料恢复未能完全完成。');}
+      throw error;
+    }
+    const removed=new Set(documents.map(doc=>doc.id));
+    next.documents=next.documents.filter(doc=>!removed.has(doc.id));
+    next.settings.documentOrder=next.settings.documentOrder.filter(id=>!removed.has(id));
+    return {
+      replaceBackup:true,rollback,
+      // The committed catalog lets startup safely finish interrupted byte cleanup.
+      finalize:async()=>{
+        const failures=[];
+        for(const item of staged) try {await unlink(item.staged);} catch(error) {if(error.code!=='ENOENT') failures.push(error);}
+        if(failures.length) throw new StoreError('回收站记录已清理，但部分 PDF 正被占用，尚未释放空间。请重新启动阅读器完成清理。',503);
+      },
+    };
+  };
   const importStream=(stream,{name,categoryId=''}={})=>mutate(async next=>{
     name=nameOf(name);categoryOf(next,categoryId);
     const id=randomUUID(),file=path.join(dataDir,'pdfs',`${id}.pdf`),temporary=file+'.upload.tmp';
@@ -289,6 +337,21 @@ export async function openStore(dataDir) {
       return importStream(Readable.from([bytes]),{name,categoryId});
     },
     importStream,
+    reorderDocument(value) {return mutate(next=>{
+      if(!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).length!==2 || !Object.hasOwn(value,'id') || !Object.hasOwn(value,'beforeId') || typeof value.id!=='string' || typeof value.beforeId!=='string') invalid('文件排序内容无效。');
+      const doc=documentOf(next,value.id),target=value.beforeId ? documentOf(next,value.beforeId) : null;
+      if(doc.deletedAt || doc.review || target?.deletedAt || target?.review) throw new StoreError('只能对资料库中的文件排序。',409);
+      if(value.id===value.beforeId) return false;
+      const order=sortDocuments(next.documents.filter(item=>!item.deletedAt&&!item.review),{sort:next.settings.librarySort,order:next.settings.documentOrder}).map(item=>item.id).filter(id=>id!==value.id);
+      order.splice(value.beforeId ? order.indexOf(value.beforeId) : order.length,0,value.id);
+      if(next.settings.librarySort==='manual' && JSON.stringify(order)===JSON.stringify(next.settings.documentOrder)) return false;
+      next.settings.librarySort='manual';next.settings.documentOrder=order;
+    });},
+    emptyTrash(value) {return mutate(async next=>{
+      const ids=trashSnapshot(value),documents=next.documents.filter(doc=>doc.deletedAt&&ids.has(doc.id));
+      if(!documents.length) return false;
+      return stageDeletion(next,documents);
+    });},
     collectReview(sourceId,value) {return mutate(async next=>{
       const {pages,name}=reviewRequest(value);
       const source=documentOf(next,sourceId);
@@ -309,6 +372,7 @@ export async function openStore(dataDir) {
       const doc=documentOf(next,id);
       if(doc.deletedAt) return false;
       doc.deletedAt=new Date().toISOString();
+      next.settings.documentOrder=next.settings.documentOrder.filter(item=>item!==id);
     }); },
     restoreDocument(id) { return mutate(next=>{
       const doc=documentOf(next,id);
@@ -318,16 +382,7 @@ export async function openStore(dataDir) {
     permanentlyDeleteDocument(id) { return mutate(async next=>{
       const doc=documentOf(next,id);
       if(!doc.deletedAt) throw new StoreError('请先将文件移入回收站。',409);
-      const file=path.join(dataDir,'pdfs',`${id}.pdf`),staged=file+'.deleting';
-      await rename(file,staged);
-      next.documents=next.documents.filter(item=>item.id!==id);
-      return {
-        replaceBackup:true,
-        rollback:()=>rename(staged,file),
-        // If Windows temporarily holds a file handle, the catalog stays
-        // committed and startup finishes removing the staged file safely.
-        finalize:()=>unlink(staged).catch(error=>{if(error.code!=='ENOENT') console.warn('待下次启动完成 PDF 清理：',error.code);}),
-      };
+      return stageDeletion(next,[doc]);
     }); },
     patchDocument(id,patch) { return mutate(next=>{
       if(!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k=>!['name','categoryId','lastPage'].includes(k)) || !Object.keys(patch).length) invalid('修改内容无效。');
@@ -391,12 +446,14 @@ export async function openStore(dataDir) {
       doc.bookmarks.splice(index,1);
     }); },
     patchSettings(patch) { return mutate(next=>{
-      if(!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length || Object.keys(patch).some(key=>!['theme','screensaver'].includes(key))) invalid('设置无效。');
+      if(!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length || Object.keys(patch).some(key=>!['theme','screensaver','librarySort'].includes(key))) invalid('设置无效。');
       const theme=Object.hasOwn(patch,'theme') ? themeOf(patch.theme) : next.settings.theme;
       const screensaver=Object.hasOwn(patch,'screensaver') ? screensaverOf(patch.screensaver) : next.settings.screensaver;
-      if(theme === next.settings.theme && screensaver.enabled === next.settings.screensaver.enabled && screensaver.minutes === next.settings.screensaver.minutes) return false;
+      const librarySort=Object.hasOwn(patch,'librarySort') ? librarySortOf(patch.librarySort) : next.settings.librarySort;
+      if(theme === next.settings.theme && screensaver.enabled === next.settings.screensaver.enabled && screensaver.minutes === next.settings.screensaver.minutes && librarySort===next.settings.librarySort) return false;
       next.settings.theme=theme;
       next.settings.screensaver=screensaver;
+      next.settings.librarySort=librarySort;
     }); },
     close() { if(!closing) {closed=true;closing=queue.then(release);}return closing; },
   };

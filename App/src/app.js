@@ -1,7 +1,8 @@
 import { themes, getTheme } from './themes.js';
 import { getPresentation } from './presentation.js';
 import { EnvironmentScene } from './environment.js';
-import { dateGroups, filterDocuments, humanSize } from './library-model.js';
+import { dateGroups, filterDocuments, sortDocuments, humanSize } from './library-model.js';
+import { createSidebarDragScroll } from './sidebar-drag-scroll.js';
 import { PdfReader } from './reader.js';
 import { AnnotationEditor } from './annotation-editor.js';
 import { formatPageList, reviewEntries, collectionTime } from './review-model.js';
@@ -25,6 +26,9 @@ let lastReaderState = { page: 1, pageCount: 0, zoom: 1, loading: false };
 let menuContext = null, toastTimer, bookmarkBusy = false, pendingSaves = 0, draggedDocument = '', dragSuppressUntil = 0;
 let readingFullscreen = false, fullscreenBusy = false, fullscreenRequest = 0;
 let screensaverSaveQueue = Promise.resolve(), pendingScreensaverSettings = null;
+let deferredLibraryRender = false, libraryActionBusy = false;
+const librarySorts = [ ['newest', '导入时间：最新在前'], ['oldest', '导入时间：最早在前'], ['name-asc', '名称：A–Z'], ['name-desc', '名称：Z–A'], ['manual', '手动排序'] ];
+const sortOptions = () => ({sort: library.settings.librarySort || 'newest', order: library.settings.documentOrder || []});
 const pendingPositions = new Map();
 const pendingAnnotationDeletes = new Set();
 try {
@@ -124,7 +128,14 @@ function fileRows(files) {
 }
 
 function renderLibrary() {
+  if (draggedDocument) { deferredLibraryRender = true; return; }
+  deferredLibraryRender = false;
   const active = library.documents.filter(d => !d.deletedAt && !d.review), trash = library.documents.filter(d => d.deletedAt);
+  $('library-sort').hidden = tab === 'trash' || tab === 'review';
+  $('library-sort').title = '文件排序 · ' + (librarySorts.find(([value]) => value === (library.settings.librarySort || 'newest'))?.[1] || '');
+  $('library-sort').disabled = libraryActionBusy;
+  $('trash-actions').hidden = tab !== 'trash';
+  $('empty-trash').disabled = !trash.length || libraryActionBusy;
   $('total-count').textContent = active.length;
   for (const kind of ['categories', 'dates', 'trash']) $(kind + '-tab').classList.toggle('active', tab === kind);
   $('trash-count').textContent = trash.length || '';
@@ -153,7 +164,7 @@ function renderLibrary() {
     : [{ id: '', name: '全部日期', count: active.length, icon: '◷' }, ...dateGroups(active).map(d => ({ id: d.date, name: formatDate(d.date), count: d.count, icon: '·' }))];
   $('filters').innerHTML = items.map(item => {
     const expanded = expandedKey === item.id;
-    const files = expanded ? filterDocuments(active, { query: filter.query, categoryId: tab === 'categories' ? item.id : '', date: tab === 'dates' ? item.id : '' }) : [];
+    const files = expanded ? filterDocuments(active, { query: filter.query, categoryId: tab === 'categories' ? item.id : '', date: tab === 'dates' ? item.id : '', ...sortOptions() }) : [];
     return `<section class="library-group"><div class="category-heading"><button class="filter-button ${expanded ? 'active' : ''}" data-filter="${escape(item.id)}" aria-expanded="${expanded}">
       <span class="filter-icon">${item.icon}</span><span class="filter-name">${escape(item.name)}</span><span class="filter-count">${item.count}</span><span class="filter-chevron" aria-hidden="true">›</span>
       </button>${tab === 'categories' && item.id ? `<button class="category-menu" data-category-menu="${escape(item.id)}" aria-label="分类选项" title="分类选项">⋯</button>` : ''}</div>${expanded ? `<div class="category-files">${fileRows(files)}</div>` : ''}</section>`;
@@ -449,6 +460,23 @@ function permanentlyDelete(id) {
   });
 }
 
+function emptyTrash() {
+  const ids = library.documents.filter(doc => doc.deletedAt).map(doc => doc.id);
+  if (!ids.length || libraryActionBusy) return;
+  formDialog('清空回收站', `<p class="dialog-description">永久删除回收站中的全部 ${ids.length} 份文件及其高亮、批注和书签？此操作无法还原。</p>`, '永久清空', async () => {
+    libraryActionBusy = true;
+    try { await mutate('/api/trash', {method: 'DELETE', body: {ids}}); toast('回收站已清空'); }
+    catch (error) { try { accept(await api('/api/library')); } catch {} throw error; }
+    finally { libraryActionBusy = false; renderLibrary(); }
+  });
+}
+
+function showLibrarySort() {
+  const rect = $('library-sort').getBoundingClientRect();
+  showMenu(rect.left, rect.bottom + 7, librarySorts.map(([value, label]) => `<button role="menuitemradio" aria-checked="${value === (library.settings.librarySort || 'newest')}" data-action="sort" data-sort="${value}"><span aria-hidden="true" class="sort-check">${value === (library.settings.librarySort || 'newest') ? '✓' : ''}</span>${label}</button>`).join(''), {type: 'sort'});
+  $('library-sort').setAttribute('aria-expanded', 'true');
+}
+
 function renameCategory(id) {
   const category = library.categories.find(c => c.id === id);
   if (!category) return;
@@ -578,7 +606,7 @@ $('notes-content').onclick = async event => {
   } catch (error) { toast(error.message, true); button.disabled = false; }
 };
 
-function hideMenu() { $('context-menu').hidden = true; menuContext = null; }
+function hideMenu() { $('context-menu').hidden = true; menuContext = null; $('library-sort').setAttribute('aria-expanded', 'false'); }
 function showMenu(x, y, html, context) {
   const menu = $('context-menu');
   menu.innerHTML = html;
@@ -616,6 +644,11 @@ $('context-menu').onclick = async event => {
   if (action === 'delete-category') return deleteCategory(context.id);
   if (action === 'annotation') return editAnnotation(context.id, context.selection, context.annotationId);
   try {
+    if (action === 'sort') {
+      libraryActionBusy = true; $('library-sort').disabled = true;
+      try { await mutate('/api/settings', {method: 'PATCH', body: {librarySort: button.dataset.sort}}); }
+      finally { libraryActionBusy = false; renderLibrary(); }
+    }
     if (action === 'delete-annotation') {
       if (annotationEditor.saving) return;
       await deleteAnnotation(context.id, context.annotationId);
@@ -747,6 +780,8 @@ document.querySelector('.library').addEventListener('contextmenu', event => {
   hideMenu();
 });
 $('add-category').onclick = addCategory;
+$('library-sort').onclick = showLibrarySort;
+$('empty-trash').onclick = emptyTrash;
 $('theme-button').onclick = showThemes;
 $('fullscreen-button').onclick = toggleFullscreen;
 document.querySelector('.brand').onclick = event => { event.preventDefault(); showHome(); };
@@ -784,34 +819,63 @@ document.addEventListener('drop', event => { event.preventDefault(); dragDepth =
 document.addEventListener('visibilitychange', () => scene.setHidden(document.hidden));
 reducedMotion.addEventListener('change', () => applyTheme(library.settings.theme));
 const dragType='application/x-carnet-pdf';
+const sidebarDragScroll = createSidebarDragScroll($('filters'), {isDragging: () => Boolean(draggedDocument)});
 $('filters').addEventListener('dragstart',event=>{
   const row=event.target.closest('[data-drag-document]');
-  if(!row||row.getAttribute('draggable') !== 'true'||busy){event.preventDefault();return;}
+  if(!row||row.getAttribute('draggable') !== 'true'||busy||libraryActionBusy){event.preventDefault();return;}
   draggedDocument=row.dataset.dragDocument;event.dataTransfer.setData(dragType,draggedDocument);event.dataTransfer.effectAllowed='move';
   row.classList.add('dragging');hideMenu();
 });
-function clearDropTargets(){document.querySelectorAll('.category-drop-target,.dragging').forEach(el=>el.classList.remove('category-drop-target','dragging'));}
-$('filters').addEventListener('dragend',()=>{draggedDocument='';dragSuppressUntil=Date.now()+250;clearDropTargets();});
-$('filters').addEventListener('dragover',event=>{
-  const target=event.target.closest('[data-filter]');
-  if(tab!=='categories'||!target||!draggedDocument||!event.dataTransfer.types.includes(dragType))return;
+function clearDropTargets(){document.querySelectorAll('.category-drop-target,.reorder-before,.reorder-after').forEach(el=>el.classList.remove('category-drop-target','reorder-before','reorder-after'));}
+function finishSidebarDrag() {
+  sidebarDragScroll.stop(); draggedDocument=''; dragSuppressUntil=Date.now()+250; clearDropTargets();
+  document.querySelectorAll('.dragging').forEach(el=>el.classList.remove('dragging'));
+  if(deferredLibraryRender)renderLibrary();
+}
+function sidebarDropTarget(event,id) {
+  const category=event.target.closest('[data-filter]');
+  if(tab==='categories' && category)return {element:category,categoryId:category.dataset.filter};
+  const row=event.target.closest('[data-drag-document][draggable="true"]');
+  if(!row || row.dataset.dragDocument===id || !['categories','dates'].includes(tab))return null;
+  const rect=row.getBoundingClientRect(),after=event.clientY>=rect.top+rect.height/2;
+  const ordered=sortDocuments(library.documents.filter(doc=>!doc.deletedAt&&!doc.review&&doc.id!==id),sortOptions());
+  const index=ordered.findIndex(doc=>doc.id===row.dataset.dragDocument);
+  if(index<0)return null;
+  return {element:row,after,beforeId:after ? ordered[index+1]?.id || '' : row.dataset.dragDocument};
+}
+$('filters').addEventListener('dragend',finishSidebarDrag);
+for(const type of ['dragenter','dragover']) $('filters').addEventListener(type,event=>{
+  sidebarDragScroll.update(event);
+  if(!draggedDocument||!event.dataTransfer.types.includes(dragType))return;
   event.preventDefault();event.dataTransfer.dropEffect='move';
-  document.querySelectorAll('.category-drop-target').forEach(el=>{if(el!==target)el.classList.remove('category-drop-target');});
-  target.classList.add('category-drop-target');
+  clearDropTargets();
+  const target=sidebarDropTarget(event,draggedDocument);
+  if(target)target.element.classList.add(Object.hasOwn(target,'categoryId') ? 'category-drop-target' : target.after ? 'reorder-after' : 'reorder-before');
 });
 $('filters').addEventListener('dragleave',event=>{
-  const target=event.target.closest('[data-filter]');if(target&&!target.contains(event.relatedTarget))target.classList.remove('category-drop-target');
+  if(!$('filters').contains(event.relatedTarget))clearDropTargets();
 });
 $('filters').addEventListener('drop',async event=>{
   if(!event.dataTransfer.types.includes(dragType))return;
-  event.preventDefault();event.stopPropagation();clearDropTargets();
-  const target=event.target.closest('[data-filter]'),id=event.dataTransfer.getData(dragType);
-  draggedDocument='';dragSuppressUntil=Date.now()+250;
-  if(tab!=='categories'||!target||busy)return;
-  const doc=library.documents.find(d=>d.id===id),categoryId=target.dataset.filter;
-  if(!doc||doc.deletedAt||doc.review||doc.categoryId===categoryId||categoryId&&!library.categories.some(c=>c.id===categoryId))return;
-  try{await mutate(`/api/documents/${id}`,{method:'PATCH',body:{categoryId}});toast(`已移至 ${library.categories.find(c=>c.id===categoryId)?.name||'全部文件'}`);}
-  catch(error){toast(error.message,true);}
+  event.preventDefault();event.stopPropagation();
+  const id=event.dataTransfer.getData(dragType),target=sidebarDropTarget(event,id),local=id===draggedDocument;
+  finishSidebarDrag();
+  if(!local||!target||busy||libraryActionBusy)return;
+  const doc=library.documents.find(d=>d.id===id);
+  if(!doc||doc.deletedAt||doc.review)return;
+  libraryActionBusy=true;
+  try {
+    if(Object.hasOwn(target,'categoryId')) {
+      const categoryId=target.categoryId;
+      if(doc.categoryId===categoryId||categoryId&&!library.categories.some(c=>c.id===categoryId))return;
+      await mutate(`/api/documents/${id}`,{method:'PATCH',body:{categoryId}});
+      toast(`已移至 ${library.categories.find(c=>c.id===categoryId)?.name||'全部文件'}`);
+    } else {
+      await mutate('/api/documents/reorder',{method:'POST',body:{id,beforeId:target.beforeId}});
+      toast('文件顺序已保存');
+    }
+  }catch(error){toast(error.message,true);}
+  finally{libraryActionBusy=false;renderLibrary();}
 });
 window.addEventListener('pagehide', () => {
   if (!ready || !token) return;

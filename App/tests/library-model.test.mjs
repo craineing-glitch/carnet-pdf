@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dateGroups, filterDocuments, humanSize} from '../src/library-model.js';
+import {dateGroups, filterDocuments, humanSize, sortDocuments} from '../src/library-model.js';
 
 const documents = [
   {id:'1',name:'Bonjour Paris',categoryId:'fr',importedAt:'2026-10-09T10:00:00.000Z'},
@@ -17,4 +17,17 @@ test('category, date and case-insensitive search combine without changing the li
 });
 test('file sizes are readable including an empty file',()=>{
   assert.equal(humanSize(0),'0 B'); assert.equal(humanSize(1024),'1 KB'); assert.equal(humanSize(1572864),'1.5 MB');
+});
+
+test('name ordering uses natural numbers and date ordering can be reversed without changing the library',()=>{
+  const files=documents.map((d,i)=>({...d,name:['Report 10.pdf','Report 2.pdf','Report 1.pdf'][i]}));
+  assert.deepEqual(sortDocuments(files,{sort:'name-asc'}).map(d=>d.id),['3','2','1']);
+  assert.deepEqual(sortDocuments(files,{sort:'name-desc'}).map(d=>d.id),['1','2','3']);
+  assert.deepEqual(sortDocuments(files,{sort:'oldest'}).map(d=>d.id),['1','2','3']);
+  assert.deepEqual(files.map(d=>d.id),['1','2','3']);
+});
+
+test('manual sorting preserves saved order and shows new imports first within filtered categories',()=>{
+  assert.deepEqual(sortDocuments(documents,{sort:'manual',order:['1','3']}).map(d=>d.id),['2','1','3']);
+  assert.deepEqual(filterDocuments(documents,{categoryId:'fr',sort:'manual',order:['1','3']}).map(d=>d.id),['1','3']);
 });

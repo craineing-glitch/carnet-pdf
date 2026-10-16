@@ -91,6 +91,8 @@ export async function createServer({root=defaultRoot,dataDir=root===defaultRoot?
         return;
       }
       if(method==='GET' && pathname==='/api/library') return json(res,200,store.getLibrary());
+      if(method==='POST' && pathname==='/api/documents/reorder') return json(res,200,await store.reorderDocument(await jsonBody(req)));
+      if(method==='DELETE' && pathname==='/api/trash') return json(res,200,await store.emptyTrash(await jsonBody(req)));
       if(method==='POST' && pathname==='/api/documents') {
         let name;try {name=decodeURIComponent(req.headers['x-file-name'] || '');} catch {throw new StoreError('文件名称无效。');}
         if(Number(req.headers['content-length'])>MAX_PDF_BYTES){req.resume();throw new StoreError('单个 PDF 最大支持 1 GB。',413);}

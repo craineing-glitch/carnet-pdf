@@ -18,10 +18,11 @@
     </header>
     <main class="workspace">
       <aside class="library glass-panel" aria-label="资料库侧边栏">
-        <div class="library-heading"><h1>资料库 <span id="total-count">0</span></h1><button id="import-button" class="round-button" aria-label="导入 PDF" title="导入 PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
+        <div class="library-heading"><h1>资料库 <span id="total-count">0</span></h1><div class="library-heading-actions"><button id="library-sort" class="icon-button" aria-label="文件排序" title="文件排序" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 12h8M4 18h4M18 8v12m-3-3 3 3 3-3"/></svg></button><button id="import-button" class="round-button" aria-label="导入 PDF" title="导入 PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
         <label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="搜索文件名称" aria-label="搜索文件名称" autocomplete="off"><kbd>/</kbd></label>
         <div class="navigation-tabs" role="group" aria-label="浏览方式"><button class="active" id="categories-tab">分类</button><button id="dates-tab">日期</button><button id="trash-tab" aria-label="回收站">回收站 <span id="trash-count"></span></button></div>
         <button id="review-tab" class="review-entry" aria-label="收藏夹" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg><span>收藏夹</span><span id="review-count">0</span><span aria-hidden="true">›</span></button>
+        <div id="trash-actions" class="trash-actions" hidden><button id="empty-trash" class="text-button danger-action" aria-label="清空回收站">清空回收站</button></div>
         <nav id="filters" aria-label="文件筛选"></nav>
         <button id="add-category" class="quiet-button add-category" aria-label="新增分类">＋ 新增分类</button>
         <div class="library-footer"><p><span class="status-dot"></span><span id="save-status" role="status">连接中…</span></p></div>

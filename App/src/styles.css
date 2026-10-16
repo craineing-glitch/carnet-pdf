@@ -9,6 +9,10 @@
 
 /* Reader workspace: compact navigation and a theme-aware annotation inspector. */
 .library-heading { margin-bottom: 21px; }
+.library-heading-actions{display:flex;align-items:center;gap:9px}.library-heading-actions .icon-button{width:30px;height:30px;border:1px solid #ffffff40;background:var(--surface-glass)}.library-heading-actions .icon-button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.sort-check{display:inline-block;width:19px;color:var(--teal)}.context-menu [role="menuitemradio"]{white-space:nowrap;font-size:11px}.context-menu [aria-checked="true"]{background:var(--surface-glass)}
+.trash-actions{display:flex;justify-content:flex-end;flex-shrink:0;margin:0 0 9px}.trash-actions button{border:1px solid #ffffff40;background:var(--control-glass);padding:7px 11px;border-radius:8px}.trash-actions button:disabled{opacity:.35;cursor:default}
+.file-row.reorder-before::before,.file-row.reorder-after::after{content:'';position:absolute;left:5px;right:5px;height:3px;border-radius:3px;background:var(--teal);box-shadow:0 0 0 1px #fff9;pointer-events:none;z-index:2}.file-row.reorder-before::before{top:-3px}.file-row.reorder-after::after{bottom:-3px}
 .library #filters { max-height: none; flex: 1; min-height: 0; overflow: auto; margin: 0 -5px; padding: 0 5px; }
 .library-group { margin-bottom: 5px; }
 .filter-button { margin-bottom: 0; padding: 12px 10px; }
